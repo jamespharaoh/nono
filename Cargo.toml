@@ -1,0 +1,7 @@
+[package]
+name = "nono"
+version = "0.1.0"
+authors = ["James Pharaoh <james@pharaoh.uk>"]
+edition = "2018"
+
+[dependencies]
