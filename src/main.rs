@@ -5,16 +5,17 @@ mod clues;
 mod grid;
 mod line;
 mod samples;
+mod solver;
 
 use std::env;
-
-use crate::grid::Grid;
-
-use crate::line::Line;
-use crate::line::LineSize;
-use crate::line::solve_line;
+use std::thread;
+use std::time;
 
 use crate::clues::Clues;
+use crate::grid::Grid;
+use crate::line::LineSize;
+use crate::solver::solve_col;
+use crate::solver::solve_row;
 
 fn main () {
 
@@ -38,7 +39,7 @@ fn main () {
 
 	};
 
-	println! ("N: [{}]", name);
+	println! ("Selected puzzle: {}", name);
 
 	solve (& clues);
 
@@ -53,66 +54,80 @@ fn solve (
 		clues.cols.len () as LineSize,
 	);
 
-	let mut iterations = 0;
+	let mut line_iterations = 0;
+	let mut grid_iterations = 0;
+
+	let mut vertical = false;
+	let mut index = 0;
+
+	grid.print ();
 
 	while ! grid.is_solved () {
 
-		solve_rows (
-			& mut grid.rows,
-			& mut grid.cols,
-			& clues.rows,
-		);
-
-		iterations += 1;
-
-		grid.print ();
+		// check if solved
 
 		if grid.is_solved () {
 			break;
 		}
 
-		solve_rows (
-			& mut grid.cols,
-			& mut grid.rows,
-			& clues.cols,
-		);
+		if ! vertical && index == 0 {
+			grid_iterations += 1;
+		}
 
-		iterations += 1;
+		// solve next
 
-		grid.print ();
+		let progress;
+
+		if ! vertical {
+
+			progress = solve_row (
+				& mut grid,
+				& clues,
+				index,
+			);
+
+			index += 1;
+
+			if index == grid.num_rows () {
+				vertical = true;
+				index = 0;
+			}
+
+		} else {
+
+			progress = solve_col (
+				& mut grid,
+				& clues,
+				index,
+			);
+
+			index += 1;
+
+			if index == grid.num_cols () {
+				vertical = false;
+				index = 0;
+			}
+
+		}
+
+		if progress {
+
+			line_iterations += 1;
+
+			thread::sleep (time::Duration::from_millis (100));
+
+			print! ("\x1b[{}A", grid.num_rows () + 2);
+
+			grid.print ();
+
+		}
 
 	}
 
-	println! ("Solved in {} iterations", iterations);
-
-}
-
-fn solve_rows (
-	grid_rows: & mut Vec <Line>,
-	grid_cols: & mut Vec <Line>,
-	all_clues: & Vec <Vec <u16>>,
-) {
-
-	for row_num in 0 .. grid_rows.len () {
-
-		let existing_line = & grid_rows [row_num];
-
-		if existing_line.is_solved () {
-			continue;
-		}
-
-		let combined_line = solve_line (
-			& grid_rows [row_num],
-			& all_clues [row_num],
-			grid_cols.len () as LineSize,
-		);
-
-		for col_num in 0 .. combined_line.len () {
-			grid_rows [row_num as usize] [col_num as LineSize] = combined_line [col_num];
-			grid_cols [col_num as usize] [row_num as LineSize] = combined_line [col_num];
-		}
-
-	}
+	println! (
+		"Solved in {} iterations, {} lines",
+		grid_iterations,
+		line_iterations);
 
 }
 

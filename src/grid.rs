@@ -9,11 +9,13 @@ use crate::line::Line;
 use crate::line::LineSize;
 
 pub struct Grid {
-	pub rows: Vec <Line>,
-	pub cols: Vec <Line>,
+	rows: Vec <Line>,
+	cols: Vec <Line>,
 }
 
 impl Grid {
+
+	// constructors
 
 	pub fn new (
 		num_rows: LineSize,
@@ -34,6 +36,32 @@ impl Grid {
 
 	}
 
+	// getters
+
+	pub fn num_rows (
+		& self,
+	) -> LineSize {
+		self.rows.len () as LineSize
+	}
+
+	pub fn num_cols (
+		& self,
+	) -> LineSize {
+		self.cols.len () as LineSize
+	}
+
+	pub fn rows (
+		& self,
+	) -> & [Line] {
+		& self.rows
+	}
+
+	pub fn cols (
+		& self,
+	) -> & [Line] {
+		& self.cols
+	}
+
 	pub fn is_solved (
 		& self,
 	) -> bool {
@@ -41,6 +69,28 @@ impl Grid {
 			|row| row.is_solved (),
 		)
 	}
+
+	// setters
+
+	pub fn get (
+		& self,
+		row_index: LineSize,
+		col_index: LineSize,
+	) -> u8 {
+		self.rows [row_index] [col_index]
+	}
+
+	pub fn set (
+		& mut self,
+		row_index: LineSize,
+		col_index: LineSize,
+		value: u8,
+	) {
+		self.rows [row_index] [col_index] = value;
+		self.cols [col_index] [row_index] = value;
+	}
+
+	// misc
 
 	pub fn print (
 		& self,
