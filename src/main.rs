@@ -4,10 +4,10 @@ mod cell;
 mod clues;
 mod grid;
 mod line;
-mod samples;
 mod solver;
 
 use std::env;
+use std::path::Path;
 use std::thread;
 use std::time;
 
@@ -27,19 +27,9 @@ fn main () {
 		""
 	};
 
-	let clues = match name {
-
-		"camel" => samples::camel (),
-		"eagle" => samples::eagle (),
-
-		_ => {
-			println! ("No such sample: {}", name);
-			return;
-		}
-
-	};
-
-	println! ("Selected puzzle: {}", name);
+	let clues = Clues::load (
+		& Path::new (name),
+	).unwrap ();
 
 	solve (& clues);
 
