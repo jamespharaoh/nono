@@ -7,10 +7,17 @@ mod line;
 mod solver;
 
 use std::env;
+use std::io;
+use std::io::Write;
+use std::iter;
 use std::path::Path;
 use std::thread;
 use std::time;
 
+use crate::cell::EMPTY;
+use crate::cell::ERROR;
+use crate::cell::FILLED;
+use crate::cell::UNKNOWN;
 use crate::clues::Clues;
 use crate::grid::Grid;
 use crate::line::LineSize;
@@ -50,7 +57,7 @@ fn solve (
 	let mut vertical = false;
 	let mut index = 0;
 
-	grid.print ();
+	print_grid (& grid);
 
 	while ! grid.is_solved () {
 
@@ -63,6 +70,10 @@ fn solve (
 		if ! vertical && index == 0 {
 			grid_iterations += 1;
 		}
+
+		print! ("\r\x1b[2K{} {} ...", if vertical { "col" } else { "row" }, index);
+
+		io::stdout ().flush ().unwrap ();
 
 		// solve next
 
@@ -106,18 +117,55 @@ fn solve (
 
 			thread::sleep (time::Duration::from_millis (100));
 
-			print! ("\x1b[{}A", grid.num_rows () + 2);
+			print! ("\r\x1b[{}A", grid.num_rows () + 2);
 
-			grid.print ();
+			print_grid (& grid);
 
 		}
 
 	}
 
 	println! (
-		"Solved in {} iterations, {} lines",
+		"\r\x1b[2KSolved in {} iterations, {} lines",
 		grid_iterations,
 		line_iterations);
+
+}
+
+pub fn print_grid (
+	grid: & Grid,
+) {
+
+	println! (
+		"┌{}┐",
+		iter::repeat ("─").take (
+			grid.num_cols () as usize * 2,
+		).collect::<String> ());
+
+	for row in grid.rows () {
+
+		println! (
+			"│{}│",
+			row.iter ().map (
+				|cell|
+
+				match * cell {
+					UNKNOWN => "░░",
+					EMPTY => "  ",
+					FILLED => "██",
+					ERROR => "!!",
+					_ => "??",
+				}
+
+			).collect::<String> ());
+
+	}
+
+	println! (
+		"└{}┘",
+		iter::repeat ("─").take (
+			grid.num_cols () as usize * 2,
+		).collect::<String> ());
 
 }
 

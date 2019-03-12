@@ -1,10 +1,5 @@
 use std::iter;
 
-use crate::cell::UNKNOWN;
-use crate::cell::ERROR;
-use crate::cell::EMPTY;
-use crate::cell::FILLED;
-
 use crate::line::Line;
 use crate::line::LineSize;
 
@@ -77,7 +72,7 @@ impl Grid {
 		row_index: LineSize,
 		col_index: LineSize,
 	) -> u8 {
-		self.rows [row_index] [col_index]
+		self.rows [row_index as usize] [col_index]
 	}
 
 	pub fn set (
@@ -86,47 +81,8 @@ impl Grid {
 		col_index: LineSize,
 		value: u8,
 	) {
-		self.rows [row_index] [col_index] = value;
-		self.cols [col_index] [row_index] = value;
-	}
-
-	// misc
-
-	pub fn print (
-		& self,
-	) {
-
-		println! (
-			"┌{}┐",
-			iter::repeat ("─").take (
-				self.cols.len () * 2,
-			).collect::<String> ());
-
-		for row in & self.rows {
-
-			println! (
-				"│{}│",
-				row.iter ().map (
-					|cell|
-
-					match * cell {
-						UNKNOWN => "░░",
-						EMPTY => "  ",
-						FILLED => "██",
-						ERROR => "!!",
-						_ => "??",
-					}
-
-				).collect::<String> ());
-
-		}
-
-		println! (
-			"└{}┘",
-			iter::repeat ("─").take (
-				self.cols.len () * 2,
-			).collect::<String> ());
-
+		self.rows [row_index as usize] [col_index] = value;
+		self.cols [col_index as usize] [row_index] = value;
 	}
 
 }
