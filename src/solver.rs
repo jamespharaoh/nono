@@ -10,6 +10,7 @@ use crate::line::Line;
 use crate::line::LineRef;
 use crate::line::LineSize;
 
+#[ inline (always) ]
 pub fn solve_row (
 	grid: & mut Grid,
 	clues: & Clues,
@@ -43,6 +44,7 @@ pub fn solve_row (
 
 }
 
+#[ inline (always) ]
 pub fn solve_col (
 	grid: & mut Grid,
 	clues: & Clues,
@@ -158,6 +160,7 @@ fn place_clues_real (
 
 }
 
+#[ inline (always) ]
 fn place_clues (
 	result: & mut Vec <(LineSize, LineSize)>,
 	existing_line: & LineRef,
@@ -173,6 +176,7 @@ fn place_clues (
 
 }
 
+#[ inline (always) ]
 pub fn render_placed_clues <'a> (
 	placed_clues: & 'a [(LineSize, LineSize)],
 	line_size: LineSize,
