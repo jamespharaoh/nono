@@ -7,6 +7,7 @@ use crate::clues::Clues;
 use crate::clues::CluesLine;
 use crate::grid::Grid;
 use crate::line::Line;
+use crate::line::LineRef;
 use crate::line::LineSize;
 
 pub fn solve_row (
@@ -75,98 +76,78 @@ pub fn solve_col (
 
 }
 
-pub fn line_fits (
-	existing_line: & Line,
-	candidate_line: & Line,
-) -> bool {
-
-	for (existing_cell, candidate_cell) in existing_line.iter ().zip (
-		candidate_line.iter (),
-	) {
-
-		if (
-			* existing_cell != UNKNOWN
-			&& * existing_cell != * candidate_cell
-		) {
-			return false;
-		}
-
-	}
-
-	true
-
-}
-
 fn place_clues_real (
-	existing_line: & Line,
+	result: & mut Vec <(LineSize, LineSize)>,
+	existing_line: & LineRef,
 	clues_line: & [LineSize],
-) -> Option <Vec <(LineSize, LineSize)>> {
+	offset: LineSize,
+) -> Option <LineSize> {
+
+	let result_len = result.len ();
 
 	if clues_line.is_empty () {
 
 		return if existing_line.iter ().all (
 			|cell| * cell == UNKNOWN || * cell == EMPTY
 		) {
-			Some (vec! [])
+			Some (0)
 		} else {
 			None
 		}
 
 	}
 
-	let size = clues_line [0];
+	let my_size = clues_line [0];
 
-	if size > existing_line.len () {
+	if my_size > existing_line.len () {
 		return None;
 	}
 
-	for start in 0 ..= existing_line.len () - size {
+	for my_start in 0 ..= existing_line.len () - my_size {
 
 		if existing_line.iter ().skip (
-			start as usize,
+			my_start as usize,
 		).take (
-			size as usize,
+			my_size as usize,
 		).all (
 			|cell| * cell == UNKNOWN || * cell == FILLED
 		) && (false
-			|| existing_line.len () == start + size
-			|| existing_line [start + size] == UNKNOWN
-			|| existing_line [start + size] == EMPTY
+			|| existing_line.len () == my_start + my_size
+			|| existing_line [my_start + my_size] == UNKNOWN
+			|| existing_line [my_start + my_size] == EMPTY
 		) {
 
-			if start + size == existing_line.len () {
-				return if clues_line.len () == 1 {
-					Some (vec! [(start, start + size)])
+			if my_start + my_size == existing_line.len () {
+				if clues_line.len () == 1 {
+					result.push ((offset + my_start, offset + my_start + my_size));
+					return Some (1);
 				} else {
-					None
+					return None;
 				};
 			}
 
-			if let Some (rest) = place_clues_real (
-				& existing_line [
-					start + size + 1 .. existing_line.len ()
-				].iter ().collect (),
+			result.push ((offset + my_start, offset + my_start + my_size));
+
+			if let Some (num) = place_clues_real (
+				result,
+				& existing_line [my_start + my_size + 1 .. existing_line.len ()],
 				& clues_line [1 ..],
+				offset + my_start + my_size + 1,
 			) {
 
-				return Some (
-					vec! [ (start, start + size) ].into_iter ().chain (
-						rest.iter ().map (
-							|(nested_start, nested_end)| (
-								nested_start + start + size + 1,
-								nested_end + start + size + 1,
-							)
-						),
-					).collect::<Vec <(LineSize, LineSize)>> (),
-				);
+				return Some (1 + num);
+
+			} else {
+
+				result.truncate (result_len);
 
 			}
 
 		}
 
 		if ! (false
-			|| existing_line [start] == UNKNOWN
-			|| existing_line [start] == EMPTY
+			|| existing_line [my_start] == UNKNOWN
+			|| existing_line [my_start] == EMPTY
 		) {
 			return None;
 		}
@@ -177,139 +158,117 @@ fn place_clues_real (
 
 }
 
-fn place_clues_start (
-	existing_line: & Line,
+fn place_clues (
+	result: & mut Vec <(LineSize, LineSize)>,
+	existing_line: & LineRef,
 	clues_line: & [LineSize],
-) -> Option <Vec <LineSize>> {
+) -> Option <LineSize> {
 
 	place_clues_real (
+		result,
 		existing_line,
 		clues_line,
-	).map (
-		|clues| clues.iter ().map (
-			|& (start, end)| start,
-		).collect (),
+		0,
 	)
 
 }
 
-fn place_clues_end (
-	existing_line: & Line,
-	clues_line: & [LineSize],
-) -> Option <Vec <LineSize>> {
+pub fn render_placed_clues <'a> (
+	placed_clues: & 'a [(LineSize, LineSize)],
+	line_size: LineSize,
+) -> impl Iterator <Item = u8> + 'a {
 
-	place_clues_real (
-		& existing_line.iter ().rev ().cloned ().collect (),
-		& clues_line.iter ().rev ().cloned ().collect::<Vec <_>> (),
-	).map (
-		|clues| clues.iter ().rev ().map (
-			|& (start, end)| existing_line.len () - end,
-		).collect (),
-	)
+	placed_clues.iter ().cloned ().chain (
+		vec! [(line_size, line_size)],
+	).scan (0, move |pos: & mut LineSize, (start, end)| {
 
-}
+		let result = iter::empty ().chain (
+			iter::repeat (EMPTY).take ((start - * pos) as usize),
+		).chain (
+			iter::repeat (FILLED).take ((end - start) as usize),
+		);
 
-#[ derive (Debug) ]
-struct LineClue {
-	index: usize,
-	size: LineSize,
-	min_start: LineSize,
-	max_start: LineSize,
-	min_end: LineSize,
-	max_end: LineSize,
-	starts: Vec <LineSize>,
-}
+		* pos = end;
 
-fn line_clues (
-	existing_line: & Line,
-	clues_line: & CluesLine,
-) -> Option <Vec <LineClue>> {
+		Some (result)
 
-	let min_starts = match place_clues_start (
-		& existing_line,
-		& clues_line,
-	) {
-		Some (val) => val,
-		None => return None,
-	};
-
-	let max_starts = match place_clues_end (
-		& existing_line,
-		& clues_line,
-	) {
-		Some (val) => val,
-		None => return None,
-	};
-
-	Some (
-
-		clues_line.iter ().cloned ().zip (
-			min_starts.iter ().cloned ().zip (
-				max_starts.iter ().cloned (),
-			),
-		).enumerate ().map (
-			|(index, (size, (min_start, max_start)))| {
-
-			LineClue {
-				index: index,
-				size: size,
-				min_start: min_start,
-				max_start: max_start,
-				min_end: min_start + size,
-				max_end: max_start + size,
-				starts: (min_start ..= max_start).collect (),
-			}
-
-		}).collect (),
-
-	)
+	}).flatten ()
 
 }
 
 pub fn solve_line (
-	existing_line: & Line,
+	existing_line: & LineRef,
 	clues_line: & CluesLine,
 ) -> Option <Line> {
 
-	let mut solved_line = existing_line.clone ();
+	let mut placed_clues = Vec::with_capacity (clues_line.len ());
 
-	let line_clues = match line_clues (
+	// generate sample line
+
+	if place_clues (
+		& mut placed_clues,
 		existing_line,
 		clues_line,
-	) {
-		Some (val) => val,
-		None => return None,
-	};
+	).is_none () {
+		return None;
+	}
 
-	let mut proposed_line = existing_line.clone ();
+	let mut sample_line = render_placed_clues (
+		& placed_clues,
+		existing_line.len (),
+	).collect::<Line> ();
 
-	for (cell_index, & existing_cell) in existing_line.iter ().enumerate () {
+	for & (start, end) in placed_clues.iter () {
 
-		let cell_index = cell_index as LineSize;
+		for cell in sample_line [ start .. end ].iter_mut () {
+			* cell = FILLED;
+		}
 
-		if existing_cell != UNKNOWN {
+	}
+
+	let mut proposed_line = existing_line.to_owned ();
+	let mut solved_line = existing_line.to_owned ();
+
+	for index in 0 .. existing_line.len () {
+
+		let sample_cell = sample_line [index];
+
+		if solved_line [index] != UNKNOWN {
 			continue;
 		}
 
-		proposed_line [cell_index] = FILLED;
+		proposed_line [index] = match sample_cell {
+			EMPTY => FILLED,
+			FILLED => EMPTY,
+			_ => continue,
+		};
 
-		if place_clues_start (
+		placed_clues.truncate (0);
+
+		if place_clues (
+			& mut placed_clues,
 			& proposed_line,
 			clues_line,
 		).is_none () {
-			solved_line [cell_index] = EMPTY;
+			proposed_line [index] = sample_cell;
+			solved_line [index] = sample_cell;
+			continue;
 		}
 
-		proposed_line [cell_index] = EMPTY;
+		for (nested_index, placed_cell) in render_placed_clues (
+			& placed_clues,
+			existing_line.len (),
+		).enumerate () {
 
-		if place_clues_start (
-			& proposed_line,
-			clues_line,
-		).is_none () {
-			solved_line [cell_index] = FILLED;
+			let nested_index = nested_index as LineSize;
+
+			if placed_cell != sample_line [nested_index] {
+				sample_line [nested_index] = UNKNOWN;
+			}
+
 		}
 
-		proposed_line [cell_index] = UNKNOWN;
+		proposed_line [index] = UNKNOWN;
 
 	}
 
@@ -325,12 +284,20 @@ mod tests {
 	#[ test ]
 	fn test_place_clues_start_1 () {
 
+		let mut result = Vec::new ();
+
 		assert_eq! (
-			place_clues_start (
+			place_clues (
+				& mut result,
 				& Line::from_str (" ----").unwrap (),
 				& vec! [ 3 ],
 			),
-			Some (vec! [ 1 ]),
+			Some (1),
+		);
+
+		assert_eq! (
+			result,
+			vec! [ (1, 4) ],
 		);
 
 	}
@@ -338,12 +305,20 @@ mod tests {
 	#[ test ]
 	fn test_place_clues_start_2 () {
 
+		let mut result = Vec::new ();
+
 		assert_eq! (
-			place_clues_start (
+			place_clues (
+				& mut result,
 				& Line::from_str ("----- ----").unwrap (),
 				& vec! [ 3, 4 ],
 			),
-			Some (vec! [ 0, 6 ]),
+			Some (2),
+		);
+
+		assert_eq! (
+			result,
+			vec! [ (0, 3), (6, 10) ],
 		);
 
 	}

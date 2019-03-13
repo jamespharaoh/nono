@@ -115,7 +115,7 @@ fn solve (
 
 			line_iterations += 1;
 
-			thread::sleep (time::Duration::from_millis (100));
+			thread::sleep (time::Duration::from_millis (20));
 
 			print! ("\r\x1b[{}A", grid_size);
 
@@ -192,8 +192,8 @@ pub fn print_grid (
 
 				match * cell {
 					UNKNOWN => "░░",
-					EMPTY => "  ",
-					FILLED => "██",
+					EMPTY => "██",
+					FILLED => "  ",
 					ERROR => "!!",
 					_ => "??",
 				}
