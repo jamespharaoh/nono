@@ -1,12 +1,17 @@
+use std::fmt;
 use std::iter;
 use std::ops;
 use std::slice;
+use std::vec;
 
+use crate::cell::EMPTY;
+use crate::cell::ERROR;
+use crate::cell::FILLED;
 use crate::cell::UNKNOWN;
 
 pub type LineSize = u16;
 
-#[ derive (Clone, Debug, PartialEq) ]
+#[ derive (Clone, PartialEq) ]
 pub struct Line {
 	cells: Vec <u8>,
 }
@@ -26,6 +31,29 @@ impl Line {
 			).collect (),
 
 		}
+
+	}
+
+	pub fn from_str (
+		source: & str,
+	) -> Option <Line> {
+
+		Some (Line {
+
+			cells: match source.bytes ().map (
+				|ch| match ch {
+					b'-' => Some (UNKNOWN),
+					b' ' => Some (EMPTY),
+					b'#' => Some (FILLED),
+					b'!' => Some (ERROR),
+					_ => None,
+				}
+			).collect () {
+				Some (val) => val,
+				None => return None,
+			},
+
+		})
 
 	}
 
@@ -69,6 +97,77 @@ impl Line {
 
 }
 
+impl iter::FromIterator <u8> for Line {
+
+	fn from_iter <Iter: IntoIterator <Item = u8>> (
+		iter: Iter,
+	) -> Line {
+
+		Line {
+			cells: iter.into_iter ().collect (),
+		}
+
+	}
+
+}
+
+impl <'a> iter::FromIterator <& 'a u8> for Line {
+
+	fn from_iter <Iter: IntoIterator <Item = &'a u8>> (
+		iter: Iter,
+	) -> Line {
+
+		Line {
+			cells: iter.into_iter ().cloned ().collect (),
+		}
+
+	}
+
+}
+
+impl <'a> IntoIterator for & 'a Line {
+
+	type Item = & 'a u8;
+	type IntoIter = slice::Iter <'a, u8>;
+
+	fn into_iter (
+		self,
+	) -> slice::Iter <'a, u8> {
+		self.cells.iter ()
+	}
+
+}
+
+impl fmt::Debug for Line {
+
+	fn fmt (
+		& self,
+		formatter: & mut fmt::Formatter,
+	) -> fmt::Result {
+
+		write! (
+			formatter,
+			"Line [{}]",
+			self.cells.iter ().map (
+				|cell|
+
+				match * cell {
+					UNKNOWN => "-",
+					EMPTY => " ",
+					FILLED => "#",
+					ERROR => "!",
+					_ => "?",
+				}
+
+			).collect::<String> (),
+		) ?;
+
+		Ok (())
+
+	}
+
+}
+
 impl From <Vec <u8>> for Line {
 
 	fn from (
@@ -94,6 +193,22 @@ impl ops::Index <LineSize> for Line {
 
 }
 
+impl ops::Index <ops::Range <LineSize>> for Line {
+
+	type Output = [u8];
+
+	fn index (
+		& self,
+		range: ops::Range <LineSize>,
+	) -> & [u8] {
+		& self.cells [ops::Range {
+			start: range.start as usize,
+			end: range.end as usize,
+		}]
+	}
+
+}
+
 impl ops::IndexMut <LineSize> for Line {
 
 	fn index_mut <'a> (
@@ -101,6 +216,26 @@ impl ops::IndexMut <LineSize> for Line {
 		index: LineSize,
 	) -> & 'a mut u8 {
 		& mut self.cells [index as usize]
+	}
+
+}
+
+#[ cfg (test) ]
+mod tests {
+
+	use super::*;
+
+	#[ test ]
+	fn test_line_debug () {
+
+		assert_eq! (
+			format! (
+				"{:?}",
+				Line::from (vec! [ UNKNOWN, EMPTY, FILLED, ERROR ]),
+			),
+			"Line [- #!]",
+		);
+
 	}
 
 }

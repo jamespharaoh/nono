@@ -24,7 +24,7 @@ pub fn solve_row (
 	let combined_line = solve_line (
 		& grid.rows () [row_index as usize],
 		& clues.rows [row_index as usize],
-	);
+	).unwrap ();
 
 	let mut progress = false;
 
@@ -57,7 +57,7 @@ pub fn solve_col (
 	let combined_line = solve_line (
 		& grid.cols () [col_index as usize],
 		& clues.cols [col_index as usize],
-	);
+	).unwrap ();
 
 	let mut progress = false;
 
@@ -97,167 +97,223 @@ pub fn line_fits (
 
 }
 
+fn place_clues_real (
+	existing_line: & Line,
+	clues_line: & [LineSize],
+) -> Option <Vec <(LineSize, LineSize)>> {
+
+	if clues_line.is_empty () {
+
+		return if existing_line.iter ().all (
+			|cell| * cell == UNKNOWN || * cell == EMPTY
+		) {
+			Some (vec! [])
+		} else {
+			None
+		}
+
+	}
+
+	let size = clues_line [0];
+
+	if size > existing_line.len () {
+		return None;
+	}
+
+	for start in 0 ..= existing_line.len () - size {
+
+		if existing_line.iter ().skip (
+			start as usize,
+		).take (
+			size as usize,
+		).all (
+			|cell| * cell == UNKNOWN || * cell == FILLED
+		) && (false
+			|| existing_line.len () == start + size
+			|| existing_line [start + size] == UNKNOWN
+			|| existing_line [start + size] == EMPTY
+		) {
+
+			if start + size == existing_line.len () {
+				return if clues_line.len () == 1 {
+					Some (vec! [(start, start + size)])
+				} else {
+					None
+				};
+			}
+
+			if let Some (rest) = place_clues_real (
+				& existing_line [
+					start + size + 1 .. existing_line.len ()
+				].iter ().collect (),
+				& clues_line [1 ..],
+			) {
+
+				return Some (
+					vec! [ (start, start + size) ].into_iter ().chain (
+						rest.iter ().map (
+							|(nested_start, nested_end)| (
+								nested_start + start + size + 1,
+								nested_end + start + size + 1,
+							)
+						),
+					).collect::<Vec <(LineSize, LineSize)>> (),
+				);
+
+			}
+
+		}
+
+		if ! (false
+			|| existing_line [start] == UNKNOWN
+			|| existing_line [start] == EMPTY
+		) {
+			return None;
+		}
+
+	}
+
+	None
+
+}
+
+fn place_clues_start (
+	existing_line: & Line,
+	clues_line: & [LineSize],
+) -> Option <Vec <LineSize>> {
+
+	place_clues_real (
+		existing_line,
+		clues_line,
+	).map (
+		|clues| clues.iter ().map (
+			|& (start, end)| start,
+		).collect (),
+	)
+
+}
+
+fn place_clues_end (
+	existing_line: & Line,
+	clues_line: & [LineSize],
+) -> Option <Vec <LineSize>> {
+
+	place_clues_real (
+		& existing_line.iter ().rev ().cloned ().collect (),
+		& clues_line.iter ().rev ().cloned ().collect::<Vec <_>> (),
+	).map (
+		|clues| clues.iter ().rev ().map (
+			|& (start, end)| existing_line.len () - end,
+		).collect (),
+	)
+
+}
+
+#[ derive (Debug) ]
+struct LineClue {
+	index: usize,
+	size: LineSize,
+	min_start: LineSize,
+	max_start: LineSize,
+	min_end: LineSize,
+	max_end: LineSize,
+	starts: Vec <LineSize>,
+}
+
+fn line_clues (
+	existing_line: & Line,
+	clues_line: & CluesLine,
+) -> Option <Vec <LineClue>> {
+
+	let min_starts = match place_clues_start (
+		& existing_line,
+		& clues_line,
+	) {
+		Some (val) => val,
+		None => return None,
+	};
+
+	let max_starts = match place_clues_end (
+		& existing_line,
+		& clues_line,
+	) {
+		Some (val) => val,
+		None => return None,
+	};
+
+	Some (
+
+		clues_line.iter ().cloned ().zip (
+			min_starts.iter ().cloned ().zip (
+				max_starts.iter ().cloned (),
+			),
+		).enumerate ().map (
+			|(index, (size, (min_start, max_start)))| {
+
+			LineClue {
+				index: index,
+				size: size,
+				min_start: min_start,
+				max_start: max_start,
+				min_end: min_start + size,
+				max_end: max_start + size,
+				starts: (min_start ..= max_start).collect (),
+			}
+
+		}).collect (),
+
+	)
+
+}
+
 pub fn solve_line (
 	existing_line: & Line,
 	clues_line: & CluesLine,
-) -> Line {
+) -> Option <Line> {
 
-	let mut line_perms_iter = LinePermsIter::new (
-		& clues_line,
-		existing_line.len (),
-	);
+	let mut solved_line = existing_line.clone ();
 
-	loop {
+	let line_clues = match line_clues (
+		existing_line,
+		clues_line,
+	) {
+		Some (val) => val,
+		None => return None,
+	};
 
-		if ! line_perms_iter.next () {
-			panic! ("No candidates for line");
-		}
+	let mut proposed_line = existing_line.clone ();
 
-		if line_fits (& existing_line, line_perms_iter.line ()) {
-			break;
-		}
+	for (cell_index, & existing_cell) in existing_line.iter ().enumerate () {
 
-	}
+		let cell_index = cell_index as LineSize;
 
-	let mut combined_line = line_perms_iter.line ().clone ();
-
-	while line_perms_iter.next () {
-
-		let candidate_line = line_perms_iter.line ();
-
-		if ! line_fits (& existing_line, line_perms_iter.line ()) {
+		if existing_cell != UNKNOWN {
 			continue;
 		}
 
-		for (
-			combined_cell,
-			candidate_cell,
-		) in combined_line.iter_mut ().zip (
-			candidate_line.iter (),
-		) {
+		proposed_line [cell_index] = FILLED;
 
-			if (* combined_cell != * candidate_cell) {
-				* combined_cell = UNKNOWN;
-			}
-
+		if place_clues_start (
+			& proposed_line,
+			clues_line,
+		).is_none () {
+			solved_line [cell_index] = EMPTY;
 		}
 
-		if combined_line == * existing_line {
-			break;
+		proposed_line [cell_index] = EMPTY;
+
+		if place_clues_start (
+			& proposed_line,
+			clues_line,
+		).is_none () {
+			solved_line [cell_index] = FILLED;
 		}
+
+		proposed_line [cell_index] = UNKNOWN;
 
 	}
 
-	combined_line
-
-}
-
-pub struct LinePermsIter <'a> {
-	line: Line,
-	clues: & 'a CluesLine,
-	done: bool,
-	offsets: Vec <LineSize>,
-	spare_offset: LineSize,
-}
-
-impl <'a> LinePermsIter <'a> {
-
-	pub fn new (
-		clues: & CluesLine,
-		line_size: LineSize,
-	) -> LinePermsIter {
-
-		LinePermsIter {
-
-			line: Line::with_size (line_size),
-			clues: clues,
-			done: false,
-
-			offsets: iter::repeat (0).take (
-				clues.len (),
-			).collect (),
-
-			spare_offset: line_size + 1
-				- clues.iter ().map (|val| { * val as LineSize }).sum::<LineSize> ()
-				- clues.len () as LineSize,
-
-		}
-
-	}
-
-	fn line (
-		& self,
-	) -> & Line {
-		& self.line
-	}
-
-	fn next (
-		& mut self,
-	) -> bool {
-
-		if self.done {
-			return false;
-		}
-
-		// construct line
-
-		let mut line_index = 0;
-
-		for (
-			clue,
-			offset,
-		) in self.clues.iter ().zip (
-			self.offsets.iter (),
-		) {
-
-			if line_index > 0 {
-				self.line [line_index] = EMPTY;
-				line_index += 1;
-			}
-
-			for _ in 0 .. * offset {
-				self.line [line_index] = EMPTY;
-				line_index += 1;
-			}
-
-			for _ in 0 .. * clue {
-				self.line [line_index] = FILLED;
-				line_index += 1;
-			}
-
-		}
-
-		while line_index < self.line.len () {
-			self.line [line_index] = EMPTY;
-			line_index += 1;
-		}
-
-		// advance state
-
-		let mut offset = 0;
-
-		loop {
-
-			if offset == self.offsets.len () {
-				self.done = true;
-				break;
-			}
-
-			if self.spare_offset > 0 {
-				self.offsets [offset] += 1;
-				self.spare_offset -= 1;
-				break;
-			}
-
-			self.spare_offset += self.offsets [offset];
-			self.offsets [offset] = 0;
-			offset += 1;
-
-		}
-
-		true
-
-	}
+	Some (solved_line)
 
 }
 
@@ -267,17 +323,105 @@ mod tests {
 	use super::*;
 
 	#[ test ]
-	fn test_solve_line () {
+	fn test_place_clues_start_1 () {
+
+		assert_eq! (
+			place_clues_start (
+				& Line::from_str (" ----").unwrap (),
+				& vec! [ 3 ],
+			),
+			Some (vec! [ 1 ]),
+		);
+
+	}
+
+	#[ test ]
+	fn test_place_clues_start_2 () {
+
+		assert_eq! (
+			place_clues_start (
+				& Line::from_str ("----- ----").unwrap (),
+				& vec! [ 3, 4 ],
+			),
+			Some (vec! [ 0, 6 ]),
+		);
+
+	}
+
+	#[ test ]
+	fn test_solve_line_1 () {
 
 		assert_eq! (
 			solve_line (
-				& Line::with_size (10),
+				& Line::from_str ("----------").unwrap (),
 				& vec! [ 3, 2, 3 ],
 			),
-			Line::from (vec! [
-				FILLED, FILLED, FILLED, EMPTY, FILLED,
-				FILLED, EMPTY, FILLED, FILLED, FILLED,
-			]),
+			Some (Line::from_str ("### ## ###").unwrap ()),
+		);
+
+	}
+
+	#[ test ]
+	fn test_solve_line_2 () {
+
+		assert_eq! (
+			solve_line (
+				& Line::from_str ("----------").unwrap (),
+				& vec! [ 3, 4 ],
+			),
+			Some (Line::from_str ("--#---##--").unwrap ()),
+		);
+
+	}
+
+	#[ test ]
+	fn test_solve_line_3 () {
+
+		assert_eq! (
+			solve_line (
+				& Line::from_str ("----- ----").unwrap (),
+				& vec! [ 3, 4 ],
+			),
+			Some (Line::from_str ("--#-- ####").unwrap ()),
+		);
+
+	}
+
+	#[ test ]
+	fn test_solve_line_4 () {
+
+		assert_eq! (
+			solve_line (
+				& Line::from_str ("----# ----").unwrap (),
+				& vec! [ 3, 4 ],
+			),
+			Some (Line::from_str ("  ### ####").unwrap ()),
+		);
+
+	}
+
+	#[ test ]
+	fn test_solve_line_5 () {
+
+		assert_eq! (
+			solve_line (
+				& Line::from_str ("-#---#----").unwrap (),
+				& vec! [ 3, 4 ],
+			),
+			Some (Line::from_str ("-##--###- ").unwrap ()),
+		);
+
+	}
+
+	#[ test ]
+	fn test_solve_line_6 () {
+
+		assert_eq! (
+			solve_line (
+				& Line::from_str ("--- #-----").unwrap (),
+				& vec! [ 2, 3 ],
+			),
+			Some (Line::from_str ("--- ##----").unwrap ()),
 		);
 
 	}

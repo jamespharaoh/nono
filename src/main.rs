@@ -57,7 +57,7 @@ fn solve (
 	let mut vertical = false;
 	let mut index = 0;
 
-	print_grid (& grid);
+	let grid_size = print_grid (& grid, & clues);
 
 	while ! grid.is_solved () {
 
@@ -117,9 +117,9 @@ fn solve (
 
 			thread::sleep (time::Duration::from_millis (100));
 
-			print! ("\r\x1b[{}A", grid.num_rows () + 2);
+			print! ("\r\x1b[{}A", grid_size);
 
-			print_grid (& grid);
+			print_grid (& grid, & clues);
 
 		}
 
@@ -134,15 +134,56 @@ fn solve (
 
 pub fn print_grid (
 	grid: & Grid,
-) {
+	clues: & Clues,
+) -> usize {
+
+	let max_row_clues = clues.rows.iter ().map (
+		|clues_line| clues_line.len (),
+	).max ().unwrap_or (0);
+
+	let max_col_clues = clues.cols.iter ().map (
+		|clues_line| clues_line.len (),
+	).max ().unwrap_or (0);
+
+	for row in 0 .. max_col_clues {
+
+		print! ("{} ", iter::repeat ("  ").take (max_row_clues).collect::<String> ());
+
+		for col in 0 .. grid.num_cols () {
+			if (max_col_clues - row - 1) < clues.cols [col as usize].len () {
+				print! (
+					"{:2}",
+					clues.cols [col as usize] [
+						row - (max_col_clues - clues.cols [col as usize].len ())
+					]);
+			} else {
+				print! ("  ");
+			}
+		}
+
+		print! ("\n");
+
+	}
 
 	println! (
-		"┌{}┐",
+		"{}┌{}┐",
+		iter::repeat ("  ").take (max_row_clues).collect::<String> (),
 		iter::repeat ("─").take (
 			grid.num_cols () as usize * 2,
 		).collect::<String> ());
 
-	for row in grid.rows () {
+	for (row_index, row) in grid.rows ().iter ().enumerate () {
+
+		print! (
+			"{}",
+			iter::repeat ("  ").take (
+				max_row_clues - clues.rows [row_index].len (),
+			).collect::<String> (),
+		);
+
+		for clue in clues.rows [row_index].iter () {
+			print! ("{:2}", clue);
+		}
 
 		println! (
 			"│{}│",
@@ -162,10 +203,13 @@ pub fn print_grid (
 	}
 
 	println! (
-		"└{}┘",
+		"{}└{}┘",
+		iter::repeat ("  ").take (max_row_clues).collect::<String> (),
 		iter::repeat ("─").take (
 			grid.num_cols () as usize * 2,
 		).collect::<String> ());
+
+	max_col_clues + 1 + grid.num_rows () as usize + 1
 
 }
 
