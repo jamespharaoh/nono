@@ -80,83 +80,91 @@ pub fn solve_col (
 
 fn place_clues_real (
 	result: & mut Vec <(LineSize, LineSize)>,
-	existing_line: & LineRef,
+	line: & LineRef,
 	clues_line: & [LineSize],
 	offset: LineSize,
-) -> Option <LineSize> {
+	cache: & mut Vec <Vec <Option <bool>>>,
+) -> bool {
 
 	let result_len = result.len ();
 
 	if clues_line.is_empty () {
 
-		return if existing_line.iter ().all (
+		return line.iter ().skip (offset as usize).all (
 			|cell| * cell == UNKNOWN || * cell == EMPTY
-		) {
-			Some (0)
-		} else {
-			None
-		}
+		);
 
 	}
 
 	let my_size = clues_line [0];
 
-	if my_size > existing_line.len () {
-		return None;
+	if offset + my_size > line.len () {
+		return false;
 	}
 
-	for my_start in 0 ..= existing_line.len () - my_size {
+	if let Some (cached) = cache [clues_line.len () as usize - 1] [offset as usize] {
+		return cached;
+	}
 
-		if existing_line.iter ().skip (
+	for my_start in offset ..= line.len () - my_size {
+
+		if line.iter ().skip (
 			my_start as usize,
 		).take (
 			my_size as usize,
 		).all (
 			|cell| * cell == UNKNOWN || * cell == FILLED
 		) && (false
-			|| existing_line.len () == my_start + my_size
-			|| existing_line [my_start + my_size] == UNKNOWN
-			|| existing_line [my_start + my_size] == EMPTY
+			|| line.len () == my_start + my_size
+			|| line [my_start + my_size] == UNKNOWN
+			|| line [my_start + my_size] == EMPTY
 		) {
 
-			if my_start + my_size == existing_line.len () {
+			// handle clue at end of line
+
+			if my_start + my_size == line.len () {
 				if clues_line.len () == 1 {
-					result.push ((offset + my_start, offset + my_start + my_size));
-					return Some (1);
+					result.push ((my_start, my_start + my_size));
+					cache [clues_line.len () as usize - 1] [offset as usize] = Some (true);
+					return true;
 				} else {
-					return None;
+					cache [clues_line.len () as usize - 1] [offset as usize] = Some (false);
+					return false;
 				};
 			}
 
-			result.push ((offset + my_start, offset + my_start + my_size));
+			// recurse
 
-			if let Some (num) = place_clues_real (
+			result.push ((my_start, my_start + my_size));
+
+			if place_clues_real (
 				result,
-				& existing_line [my_start + my_size + 1 .. existing_line.len ()],
+				line,
 				& clues_line [1 ..],
-				offset + my_start + my_size + 1,
+				my_start + my_size + 1,
+				cache,
 			) {
-
-				return Some (1 + num);
-
+				cache [clues_line.len () as usize - 1] [offset as usize] = Some (true);
+				return true;
 			} else {
-
 				result.truncate (result_len);
-
 			}
 
 		}
 
+		// handle can't fill cell
+
 		if ! (false
-			|| existing_line [my_start] == UNKNOWN
-			|| existing_line [my_start] == EMPTY
+			|| line [my_start] == UNKNOWN
+			|| line [my_start] == EMPTY
 		) {
-			return None;
+			cache [clues_line.len () as usize - 1] [offset as usize] = Some (false);
+			return false;
 		}
 
 	}
 
-	None
+	false
 
 }
 
@@ -165,13 +173,18 @@ fn place_clues (
 	result: & mut Vec <(LineSize, LineSize)>,
 	existing_line: & LineRef,
 	clues_line: & [LineSize],
-) -> Option <LineSize> {
+) -> bool {
+
+	let mut cache = iter::repeat (
+		iter::repeat (None).take (existing_line.len () as usize).collect (),
+	).take (clues_line.len ()).collect::<Vec <Vec <Option <bool>>>> ();
 
 	place_clues_real (
 		result,
 		existing_line,
 		clues_line,
 		0,
+		& mut cache,
 	)
 
 }
@@ -209,11 +222,11 @@ pub fn solve_line (
 
 	// generate sample line
 
-	if place_clues (
+	if ! place_clues (
 		& mut placed_clues,
 		existing_line,
 		clues_line,
-	).is_none () {
+	) {
 		return None;
 	}
 
@@ -249,11 +262,11 @@ pub fn solve_line (
 
 		placed_clues.truncate (0);
 
-		if place_clues (
+		if ! place_clues (
 			& mut placed_clues,
 			& proposed_line,
 			clues_line,
-		).is_none () {
+		) {
 			proposed_line [index] = sample_cell;
 			solved_line [index] = sample_cell;
 			continue;
@@ -296,7 +309,7 @@ mod tests {
 				& Line::from_str (" ----").unwrap (),
 				& vec! [ 3 ],
 			),
-			Some (1),
+			true,
 		);
 
 		assert_eq! (
@@ -317,7 +330,7 @@ mod tests {
 				& Line::from_str ("----- ----").unwrap (),
 				& vec! [ 3, 4 ],
 			),
-			Some (2),
+			true,
 		);
 
 		assert_eq! (
