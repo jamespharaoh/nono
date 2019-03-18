@@ -5,13 +5,13 @@ use std::fs::File;
 use std::num;
 use std::path::Path;
 
-use crate::line::LineSize;
+use crate::data::*;
 
 pub type CluesLine = Vec <LineSize>;
 
 pub struct Clues {
-	pub rows: Vec <CluesLine>,
-	pub cols: Vec <CluesLine>,
+	rows: Vec <CluesLine>,
+	cols: Vec <CluesLine>,
 }
 
 impl Clues {
@@ -56,7 +56,7 @@ impl Clues {
 
 			if line == "rows" {
 				if mode != Mode::None {
-					panic! ("parse error");
+					return Err ("parse error".into ());
 				}
 				mode = Mode::Rows;
 				continue;
@@ -64,14 +64,14 @@ impl Clues {
 
 			if line == "cols" {
 				if mode != Mode::Rows {
-					panic! ("parse error");
+					return Err ("parse error".into ());
 				}
 				mode = Mode::Cols;
 				continue;
 			}
 
 			if mode == Mode::None {
-				panic! ("parse error");
+				return Err ("parse error".into ());
 			}
 
 			let clues = line.split (" ").map (
@@ -91,6 +91,42 @@ impl Clues {
 			cols: cols,
 		})
 
+	}
+
+	pub fn num_rows (& self) -> LineSize {
+		self.rows.len () as LineSize
+	}
+
+	pub fn num_cols (& self) -> LineSize {
+		self.cols.len () as LineSize
+	}
+
+	pub fn rows (& self) -> impl Iterator <Item = & CluesLine> {
+		self.rows.iter ()
+	}
+
+	pub fn cols (& self) -> impl Iterator <Item = & CluesLine> {
+		self.cols.iter ()
+	}
+
+	pub fn row (& self, index: LineSize) -> & CluesLine {
+		& self.rows [index as usize]
+	}
+
+	pub fn col (& self, index: LineSize) -> & CluesLine {
+		& self.cols [index as usize]
+	}
+
+	pub fn rows_sum (& self) -> usize {
+		self.rows.iter ().flatten ().map (|val| * val as usize).sum ()
+	}
+
+	pub fn cols_sum (& self) -> usize {
+		self.cols.iter ().flatten ().map (|val| * val as usize).sum ()
+	}
+
+	pub fn is_consistent (& self) -> bool {
+		self.rows_sum () == self.cols_sum ()
 	}
 
 }
