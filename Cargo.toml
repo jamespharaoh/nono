@@ -11,7 +11,14 @@ name = "nono"
 name = "nono-cli"
 path = "src/bin/cli.rs"
 
+[[bin]]
+name = "nono-gtk"
+path = "src/bin/gtk.rs"
+
 [dependencies]
+cairo-rs = "0.6"
+gio = "0.6"
+gtk = "0.6"
 
 [profile.release]
 lto = true

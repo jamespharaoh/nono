@@ -157,9 +157,9 @@ impl fmt::Debug for Line {
 			formatter,
 			"Line [{}]",
 			self.cells.iter ().map (
-				|cell|
+				|& cell|
 
-				match * cell {
+				match cell {
 					Cell::UNKNOWN => "-",
 					Cell::EMPTY => " ",
 					Cell::FILLED => "#",

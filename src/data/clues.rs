@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::io;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::fs::File;
@@ -9,6 +10,7 @@ use crate::data::*;
 
 pub type CluesLine = Vec <LineSize>;
 
+#[ derive (Debug) ]
 pub struct Clues {
 	rows: Vec <CluesLine>,
 	cols: Vec <CluesLine>,
@@ -16,16 +18,24 @@ pub struct Clues {
 
 impl Clues {
 
-	pub fn load (
+	pub fn load_file (
 		filename: & Path,
 	) -> Result <Clues, Box <Error>> {
 
-		let file = File::open (
+		let mut file = File::open (
 			filename,
 		) ?;
 
+		Clues::load (& mut file)
+
+	}
+
+	pub fn load (
+		reader: & mut io::Read,
+	) -> Result <Clues, Box <Error>> {
+
 		let reader = BufReader::new (
-			& file,
+			reader,
 		);
 
 		let iter = reader.split (b'\n').map (

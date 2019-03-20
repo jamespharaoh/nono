@@ -1,97 +1,100 @@
-use std::cell::RefCell;
 use std::iter;
 use std::ops;
-use std::rc::Rc;
 
 use crate::data::*;
 use crate::solver::*;
 
-pub fn solve_grid <'a> (
-	grid: Rc <RefCell <Grid>>,
-	clues: & 'a Clues,
-) -> SolveGridIter <'a> {
+pub struct GridSolver {
 
-	SolveGridIter::new (
-		grid,
-		clues,
-	)
+	grid: Grid,
+	clues: Clues,
 
-}
+	stats: GridSolverStats,
+	changed_rows: Vec <bool>,
+	changed_cols: Vec <bool>,
 
-pub struct SolveGridIter <'a> {
-	grid: Rc <RefCell <Grid>>,
-	num_rows: LineSize,
-	num_cols: LineSize,
-	clues: & 'a Clues,
-	index: LineSize,
 	vertical: bool,
-	stats: SolveGridStats,
-	line_solver: Option <iter::Zip <ops::RangeFrom <LineSize>, LineSolver>>,
+	index: LineSize,
 	index_changed: bool,
-	stats_changed: bool,
+	line_solver: Option <iter::Zip <ops::RangeFrom <LineSize>, LineSolver>>,
 	complete: bool,
+
 }
 
 #[ derive (Clone, Copy, Debug) ]
-pub struct SolveGridStats {
+pub struct GridSolverStats {
 	pub grid_iterations: usize,
 	pub line_iterations: usize,
 }
 
 #[ derive (Debug) ]
-pub enum SolveGridEvent {
+pub enum GridSolverEvent {
 
-	Row (LineSize),
-	Col (LineSize),
+	StartRow (LineSize),
+	StartCol (LineSize),
 
-	SolvedCell {
-		row_index: LineSize,
-		col_index: LineSize,
-		value: Cell,
-	},
-
+	SolvedCell (LineSize, LineSize),
 	SolvedRow (LineSize),
+	SolvedCol (LineSize),
 	SolvedGrid,
-
-	Stats (SolveGridStats),
 
 }
 
-impl <'a> SolveGridIter <'a> {
+impl GridSolver {
 
 	pub fn new (
-		grid: Rc <RefCell <Grid>>,
-		clues: & 'a Clues,
-	) -> SolveGridIter <'a> {
+		grid: Grid,
+		clues: Clues,
+	) -> GridSolver {
 
-		let grid_value = grid.borrow ();
+		let changed_rows = iter::repeat (true).take (
+			grid.num_rows () as usize,
+		).collect ();
 
-		let num_rows = grid_value.num_rows ();
-		let num_cols = grid_value.num_cols ();
+		let changed_cols = iter::repeat (true).take (
+			grid.num_cols () as usize,
+		).collect ();
 
-		SolveGridIter {
-			grid: grid.clone (),
-			num_rows: num_rows,
-			num_cols: num_cols,
+		GridSolver {
+
+			grid: grid,
 			clues: clues,
-			index: 0,
+
+			stats: GridSolverStats::new (),
+			changed_rows: changed_rows,
+			changed_cols: changed_cols,
+
 			vertical: false,
-			stats: SolveGridStats::new (),
-			line_solver: None,
+			index: 0,
 			index_changed: true,
-			stats_changed: true,
+			line_solver: None,
 			complete: false,
+
 		}
 
+	}
+
+	pub fn grid (& self) -> & Grid {
+		& self.grid
+	}
+
+	pub fn stats (& self) -> & GridSolverStats {
+		& self.stats
 	}
 
 	fn advance (& mut self) {
 
 		let max_index = if ! self.vertical {
-			self.num_rows
+			self.grid.num_rows ()
 		} else {
-			self.num_cols
+			self.grid.num_cols ()
 		};
+
+		if ! self.vertical {
+			self.changed_rows [self.index as usize] = false;
+		} else {
+			self.changed_cols [self.index as usize] = false;
+		}
 
 		self.index += 1;
 
@@ -99,7 +102,6 @@ impl <'a> SolveGridIter <'a> {
 
 			if self.vertical {
 				self.stats.grid_iterations += 1;
-				self.stats_changed = true;
 			}
 
 			self.vertical = ! self.vertical;
@@ -108,6 +110,26 @@ impl <'a> SolveGridIter <'a> {
 		}
 
 		self.index_changed = true;
+
+	}
+
+	fn get_line_changed (& self) -> bool {
+
+		if ! self.vertical {
+			self.changed_rows [self.index as usize]
+		} else {
+			self.changed_cols [self.index as usize]
+		}
+
+	}
+
+	fn unset_line_changed (& mut self) {
+
+		if ! self.vertical {
+			self.changed_rows [self.index as usize] = false
+		} else {
+			self.changed_cols [self.index as usize] = false
+		}
 
 	}
 
@@ -121,36 +143,24 @@ impl <'a> SolveGridIter <'a> {
 
 	}
 
-	fn get_line <'b> (
-		& self,
-		grid: & 'b Grid,
-	) -> impl Iterator <Item = & 'b Cell> + 'b {
+	fn get_line <'a> (
+		& 'a self,
+	) -> Box <Iterator <Item = & 'a Cell> + 'a> {
 
-		let index = self.index;
-		let vertical = self.vertical;
-
-		let mut iter = if ! vertical {
-			Box::new (grid.row (index)) as Box <Iterator <Item = & 'b Cell> + 'b>
+		if ! self.vertical {
+			Box::new (self.grid.row (self.index))
 		} else {
-			Box::new (grid.col (index)) as Box <Iterator <Item = & 'b Cell> + 'b>
-		};
-
-		iter::repeat_with (
-			move || iter.next (),
-		).take_while (
-			Option::is_some,
-		).map (
-			Option::unwrap,
-		)
+			Box::new (self.grid.col (self.index))
+		}
 
 	}
 
 	fn get_cell (& mut self, cell_index: LineSize) -> Cell {
 
 		if ! self.vertical {
-			self.grid.borrow () [(self.index, cell_index)]
+			self.grid [(self.index, cell_index)]
 		} else {
-			self.grid.borrow () [(cell_index, self.index)]
+			self.grid [(cell_index, self.index)]
 		}
 
 	}
@@ -158,33 +168,24 @@ impl <'a> SolveGridIter <'a> {
 	fn set_cell (& mut self, cell_index: LineSize, cell: Cell) {
 
 		if ! self.vertical {
-			self.grid.borrow_mut () [(self.index, cell_index)] = cell
+			self.grid [(self.index, cell_index)] = cell;
+			self.changed_cols [cell_index as usize] = true
 		} else {
-			self.grid.borrow_mut () [(cell_index, self.index)] = cell
+			self.grid [(cell_index, self.index)] = cell;
+			self.changed_rows [cell_index as usize] = true;
 		}
 
 	}
 
-}
-
-impl <'a> Iterator for SolveGridIter <'a> {
-
-	type Item = SolveGridEvent;
-
-	fn next (
+	pub fn next (
 		& mut self,
-	) -> Option <SolveGridEvent> {
+	) -> Option <GridSolverEvent> {
+
+		if self.complete {
+			return None;
+		}
 
 		loop {
-
-			if self.complete {
-				return None;
-			}
-
-			if self.stats_changed {
-				self.stats_changed = false;
-				return Some (SolveGridEvent::Stats (self.stats));
-			}
 
 			if self.line_solver.is_some () {
 
@@ -199,45 +200,30 @@ impl <'a> Iterator for SolveGridIter <'a> {
 
 					return Some (
 						if ! self.vertical {
-
-							SolveGridEvent::SolvedCell {
-								row_index: self.index,
-								col_index: cell_index,
-								value: cell,
-							}
-
+							GridSolverEvent::SolvedCell (self.index, cell_index)
 						} else {
-
-							SolveGridEvent::SolvedCell {
-								row_index: cell_index,
-								col_index: self.index,
-								value: cell,
-							}
-
+							GridSolverEvent::SolvedCell (cell_index, self.index)
 						}
 					);
 
 				}
 
 				self.line_solver = None;
-
-				self.advance ();
-
+				self.unset_line_changed ();
 				self.stats.line_iterations += 1;
-				self.stats_changed = true;
 
 				continue;
 
 			}
 
-			if self.grid.borrow ().is_solved () {
+			if self.grid.is_solved () {
+				self.stats.grid_iterations += 1;
 				self.complete = true;
-				return Some (SolveGridEvent::SolvedGrid);
+				return Some (GridSolverEvent::SolvedGrid);
 			}
 
-			while self.get_line (
-				& self.grid.borrow (),
-			).all (Cell::is_solved) {
+			while ! self.get_line_changed ()
+			|| self.get_line ().all (Cell::is_solved) {
 				self.advance ();
 			}
 
@@ -247,17 +233,15 @@ impl <'a> Iterator for SolveGridIter <'a> {
 
 				return Some (
 					if ! self.vertical {
-						SolveGridEvent::Row (self.index)
+						GridSolverEvent::StartRow (self.index)
 					} else {
-						SolveGridEvent::Col (self.index)
+						GridSolverEvent::StartCol (self.index)
 					}
 				);
 
 			}
 
-			let existing_line = self.get_line (
-				& self.grid.borrow (),
-			).collect::<LineBuf> ();
+			let existing_line = self.get_line ().collect::<LineBuf> ();
 
 			self.line_solver = Some (
 				Iterator::zip (
@@ -273,13 +257,17 @@ impl <'a> Iterator for SolveGridIter <'a> {
 
 	}
 
+	pub fn end (self) -> (Grid, GridSolverStats) {
+		(self.grid, self.stats)
+	}
+
 }
 
-impl SolveGridStats {
+impl GridSolverStats {
 
-	pub fn new () -> SolveGridStats {
+	pub fn new () -> GridSolverStats {
 
-		SolveGridStats {
+		GridSolverStats {
 			grid_iterations: 0,
 			line_iterations: 0,
 		}

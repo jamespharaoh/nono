@@ -1,10 +1,8 @@
 #![ allow (unused_parens) ]
 
-use std::cell::RefCell;
 use std::env;
 use std::io;
 use std::path::Path;
-use std::rc::Rc;
 use std::thread;
 use std::time;
 
@@ -12,15 +10,20 @@ use nono::*;
 
 fn main () {
 
+	// parse args
+
 	let args: Vec <String> = env::args ().collect ();
 
-	let name = if args.len () >= 2 {
-		& args [1]
-	} else {
-		""
-	};
+	if args.len () != 2 {
+		println! ("Syntax: nono-cli FILE");
+		return;
+	}
 
-	let clues = Clues::load (
+	let name = & args [1];
+
+	// load clues
+
+	let clues = Clues::load_file (
 		& Path::new (name),
 	).unwrap ();
 
@@ -36,57 +39,53 @@ fn main () {
 
 	}
 
-	solve (& clues);
+	// solve
+
+	solve (clues);
 
 }
 
 fn solve (
-	clues: & Clues,
+	clues: Clues,
 ) {
 
-	let grid = Rc::new (RefCell::new (
-		Grid::new (
-			clues.num_rows (),
-			clues.num_cols (),
-		),
-	));
+	let grid = Grid::new (
+		clues.num_rows (),
+		clues.num_cols (),
+	);
 
 	let mut grid_printer = GridPrinter::new (& clues);
 
 	grid_printer.print (
 		& mut io::stdout ().lock (),
-		& grid.borrow (),
+		& grid,
 	).unwrap ();
 
-	let mut stats = SolveGridStats::new ();
-
-	for event in solve_grid (
-		grid.clone (),
+	let mut grid_solver = GridSolver::new (
+		grid,
 		clues,
-	) {
+	);
+
+	while let Some (event) = grid_solver.next () {
 
 		let mut redraw = false;
 
 		match event {
 
-			SolveGridEvent::SolvedCell { .. } => {
+			GridSolverEvent::SolvedCell { .. } => {
 				redraw = true;
 			},
 
-			SolveGridEvent::Row (index) => {
+			GridSolverEvent::StartRow (index) => {
 				print! ("\r\x1b[2Krow {} ...", index);
 			},
 
-			SolveGridEvent::Col (index) => {
+			GridSolverEvent::StartCol (index) => {
 				print! ("\r\x1b[2Kcol {} ...", index);
 			},
 
-			SolveGridEvent::SolvedGrid { .. } => {
+			GridSolverEvent::SolvedGrid { .. } => {
 				redraw = true;
-			},
-
-			SolveGridEvent::Stats (new_stats) => {
-				stats = new_stats;
 			},
 
 			_ => (),
@@ -95,12 +94,12 @@ fn solve (
 
 		if redraw {
 
-			thread::sleep (time::Duration::from_millis (20));
-
 			grid_printer.print (
 				& mut io::stdout ().lock (),
-				& grid.borrow (),
+				& grid_solver.grid (),
 			).unwrap ();
+
+			thread::sleep (time::Duration::from_millis (20));
 
 		}
 
@@ -108,8 +107,8 @@ fn solve (
 
 	println! (
 		"\r\x1b[2KSolved in {} iterations, {} lines",
-		stats.grid_iterations + 1,
-		stats.line_iterations + 1,
+		grid_solver.stats ().grid_iterations,
+		grid_solver.stats ().line_iterations,
 	);
 
 }
