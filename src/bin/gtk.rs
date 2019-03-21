@@ -1,6 +1,7 @@
 #![ allow (unused_parens) ]
 
 extern crate cairo;
+extern crate gdk;
 extern crate gio;
 extern crate gtk;
 
@@ -13,6 +14,11 @@ use std::io;
 use std::rc::Rc;
 
 use nono::*;
+
+const BORDER_SIZE: f64 = 20.5;
+const CELL_SIZE: f64 = 20.0;
+const THICK_LINE_SIZE: f64 = 3.0;
+const THIN_LINE_SIZE: f64 = 1.0;
 
 fn main () {
 
@@ -81,7 +87,14 @@ fn handle_open_one (
 
 #[ derive (Clone) ]
 struct SolverWindow {
-	solver: Rc <RefCell <GridSolver>>,
+	state: Rc <RefCell <SolverWindowState>>,
+}
+
+struct SolverWindowState {
+	solver: GridSolver,
+	palette: Palette,
+	grid_image_width: i32,
+	grid_image_height: i32,
 }
 
 impl SolverWindow {
@@ -97,7 +110,12 @@ impl SolverWindow {
 		);
 
 		let solver_window = SolverWindow {
-			solver: Rc::new (RefCell::new (solver)),
+			state: Rc::new (RefCell::new (SolverWindowState {
+				solver: solver,
+				palette: Palette::new (),
+				grid_image_width: 0,
+				grid_image_height: 0,
+			})),
 		};
 
 		solver_window.build_ui (application);
@@ -110,6 +128,8 @@ impl SolverWindow {
 		& self,
 		application: & gtk::Application,
 	) {
+
+		let mut state = self.state.borrow_mut ();
 
 		let window = gtk::ApplicationWindow::new (application);
 		window.set_title ("Nono solver");
@@ -124,6 +144,16 @@ impl SolverWindow {
 
 		window.show_all ();
 
+		state.grid_image_width = (0.0
+			+ CELL_SIZE * state.solver.grid ().num_cols () as f64
+			+ BORDER_SIZE * 2.0
+		) as i32;
+
+		state.grid_image_height = (0.0
+			+ CELL_SIZE * state.solver.grid ().num_rows () as f64
+			+ BORDER_SIZE * 2.0
+		) as i32;
+
 		let self_clone = self.clone ();
 		gtk::timeout_add (10, move || self_clone.tick (& window));
 
@@ -131,16 +161,26 @@ impl SolverWindow {
 
 	fn tick (& self, window: & gtk::ApplicationWindow) -> gtk::Continue {
 
-		let mut solver = self.solver.borrow_mut ();
-
-		let _event = match solver.next () {
-			Some (val) => val,
-			None => return gtk::Continue (false),
-		};
+		if ! self.solve_one_cell () {
+			return gtk::Continue (false);
+		}
 
 		window.queue_draw ();
 
 		gtk::Continue (true)
+
+	}
+
+	fn solve_one_cell (& self) -> bool {
+
+		let mut state = self.state.borrow_mut ();
+
+		let _event = match state.solver.next () {
+			Some (val) => val,
+			None => return false,
+		};
+
+		true
 
 	}
 
@@ -150,84 +190,85 @@ impl SolverWindow {
 		context: & cairo::Context,
 	) -> gtk::Inhibit {
 
-		let background = cairo::Pattern::SolidPattern (
-			cairo::SolidPattern::from_rgb (0.85, 0.85, 0.85));
+		let state = self.state.borrow ();
 
-		let lines = cairo::Pattern::SolidPattern (
-			cairo::SolidPattern::from_rgb (0.00, 0.00, 0.00));
+		// background
 
-		let unknown = cairo::Pattern::SolidPattern (
-			cairo::SolidPattern::from_rgb (0.70, 0.70, 0.70));
+		context.set_source (& state.palette.background);
+		context.paint ();
 
-		let filled = cairo::Pattern::SolidPattern (
-			cairo::SolidPattern::from_rgb (0.10, 0.10, 0.10));
+		// grid
 
-		let empty = cairo::Pattern::SolidPattern (
-			cairo::SolidPattern::from_rgb (1.00, 1.00, 1.00));
-
-		let error = cairo::Pattern::SolidPattern (
-			cairo::SolidPattern::from_rgb (0.80, 0.20, 0.20));
-
-		let solver = self.solver.borrow ();
-		let grid = solver.grid ();
-
-		// grid dimensions
-
-		let border_size = 1.0 as f64;
-		let cell_size = 1.0 as f64;
-		let thick_line_size = 0.15 as f64;
-		let thin_line_size = 0.05 as f64;
-
-		let grid_left = border_size;
-		let grid_top = border_size;
-		let grid_width = cell_size * grid.num_cols () as f64;
-		let grid_height = cell_size * grid.num_rows () as f64;
-
-		let total_width = border_size * 2.0 + grid_width;
-		let total_height = border_size * 2.0 + grid_height;
-		let total_ratio = total_width / total_height;
-
-		// position and scale
+		let image_width = state.grid_image_width as f64;
+		let image_height = state.grid_image_height as f64;
+		let image_ratio = image_width / image_height;
 
 		let native_width = drawing_area.get_allocated_width () as f64;
 		let native_height = drawing_area.get_allocated_height () as f64;
 		let native_ratio = native_width / native_height;
 
-		let scale = if native_ratio > total_ratio {
-			native_height / total_height
+		let scale = if native_ratio > image_ratio {
+			native_height / image_height
 		} else {
-			native_width / total_width
+			native_width / image_width
 		};
 
 		context.translate (
-			(native_width - total_width * scale) / 2.0,
-			(native_height - total_height * scale) / 2.0,
+			(native_width - image_width * scale) / 2.0,
+			(native_height - image_height * scale) / 2.0,
 		);
 
 		context.scale (scale, scale);
 
+		Self::draw_grid (& state, & context);
+
+		// return
+
+		gtk::Inhibit (false)
+
+	}
+
+	fn draw_grid (
+		state: & SolverWindowState,
+		context: & cairo::Context,
+	) {
+
+		let grid = state.solver.grid ();
+		let palette = & state.palette;
+
+		// grid dimensions
+
+		let grid_left = BORDER_SIZE;
+		let grid_top = BORDER_SIZE;
+		let grid_width = CELL_SIZE * grid.num_cols () as f64;
+		let grid_height = CELL_SIZE * grid.num_rows () as f64;
+
 		// background
 
-		context.set_source (& background);
+		context.set_source (& palette.background);
 		context.paint ();
 
 		// grid cells
 
+		context.set_antialias (cairo::Antialias::None);
+
 		for row_index in 0 .. grid.num_rows () {
 			for col_index in 0 .. grid.num_cols () {
 
-				match grid [(row_index, col_index)] {
-					Cell::UNKNOWN => context.set_source (& unknown),
-					Cell::EMPTY => context.set_source (& empty),
-					Cell::FILLED => context.set_source (& filled),
-					_ => context.set_source (& error),
-				};
+				context.set_source (
+					match grid [(row_index, col_index)] {
+						Cell::UNKNOWN => & palette.unknown,
+						Cell::EMPTY   => & palette.empty,
+						Cell::FILLED  => & palette.filled,
+						_             => & palette.error,
+					},
+				);
 
 				context.rectangle (
-					grid_left + col_index as f64,
-					grid_top + row_index as f64,
-					cell_size,
-					cell_size,
+					grid_left + CELL_SIZE * col_index as f64,
+					grid_top + CELL_SIZE * row_index as f64,
+					CELL_SIZE,
+					CELL_SIZE,
 				);
 
 				context.fill ();
@@ -238,20 +279,21 @@ impl SolverWindow {
 
 		// grid lines
 
-		context.set_source (& lines);
+		context.set_antialias (cairo::Antialias::Default);
+		context.set_source (& palette.lines);
 		context.set_line_cap (cairo::LineCap::Square);
 
 		for row_index in 0 ..= grid.num_rows () {
 
 			context.set_line_width (
 				if row_index % 5 == 0 || row_index == grid.num_rows () {
-					thick_line_size
+					THICK_LINE_SIZE
 				} else {
-					thin_line_size
+					THIN_LINE_SIZE
 				},
 			);
 
-			context.move_to (grid_left, grid_top + cell_size * row_index as f64);
+			context.move_to (grid_left, grid_top + CELL_SIZE * row_index as f64);
 			context.rel_line_to (grid_width, 0.0);
 			context.stroke ();
 
@@ -261,20 +303,17 @@ impl SolverWindow {
 
 			context.set_line_width (
 				if col_index % 5 == 0 || col_index == grid.num_cols () {
-					thick_line_size
+					THICK_LINE_SIZE
 				} else {
-					thin_line_size
+					THIN_LINE_SIZE
 				},
 			);
 
-			context.move_to (grid_left + cell_size * col_index as f64, grid_top);
+			context.move_to (grid_left + CELL_SIZE * col_index as f64, grid_top);
 			context.rel_line_to (0.0, grid_height);
-			//context.close_path ();
 			context.stroke ();
 
 		}
-
-		gtk::Inhibit (false)
 
 	}
 
@@ -304,6 +343,40 @@ impl io::Read for InputStreamReader {
 		buffer [0 .. bytes.len ()].copy_from_slice (& bytes);
 
 		Ok (bytes.len ())
+
+	}
+
+}
+
+struct Palette {
+	background: cairo::Pattern,
+	lines: cairo::Pattern,
+	unknown: cairo::Pattern,
+	filled: cairo::Pattern,
+	empty: cairo::Pattern,
+	error: cairo::Pattern,
+}
+
+impl Palette {
+
+	fn new () -> Palette {
+
+		Palette {
+			background: Self::from_rgb (0.85, 0.85, 0.85),
+			lines:      Self::from_rgb (0.00, 0.00, 0.00),
+			unknown:    Self::from_rgb (0.70, 0.70, 0.70),
+			filled:     Self::from_rgb (0.10, 0.10, 0.10),
+			empty:      Self::from_rgb (1.00, 1.00, 1.00),
+			error:      Self::from_rgb (0.80, 0.20, 0.20),
+		}
+
+	}
+
+	fn from_rgb (red: f64, green: f64, blue: f64) -> cairo::Pattern {
+
+		cairo::Pattern::SolidPattern (
+			cairo::SolidPattern::from_rgb (red, green, blue),
+		)
 
 	}
 
