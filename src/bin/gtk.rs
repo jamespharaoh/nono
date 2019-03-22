@@ -3,6 +3,7 @@
 extern crate cairo;
 extern crate gdk;
 extern crate gio;
+extern crate glib;
 extern crate gtk;
 
 use gio::prelude::*;
@@ -95,6 +96,8 @@ struct SolverWindowState {
 	palette: Palette,
 	grid_image_width: i32,
 	grid_image_height: i32,
+	window: Option <gtk::ApplicationWindow>,
+	timeout_source: Option <glib::source::SourceId>,
 }
 
 impl SolverWindow {
@@ -115,6 +118,8 @@ impl SolverWindow {
 				palette: Palette::new (),
 				grid_image_width: 0,
 				grid_image_height: 0,
+				window: None,
+				timeout_source: None,
 			})),
 		};
 
@@ -132,6 +137,7 @@ impl SolverWindow {
 		let mut state = self.state.borrow_mut ();
 
 		let window = gtk::ApplicationWindow::new (application);
+		state.window = Some (window.clone ());
 		window.set_title ("Nono solver");
 		window.set_default_size (500, 500);
 
@@ -155,19 +161,37 @@ impl SolverWindow {
 		) as i32;
 
 		let self_clone = self.clone ();
-		gtk::timeout_add (10, move || self_clone.tick (& window));
+		state.timeout_source = Some (
+			gtk::timeout_add (10, move || self_clone.tick ()),
+		);
+
+		let self_clone = self.clone ();
+		window.connect_destroy (move |_window|
+			self_clone.destroy (),
+		);
 
 	}
 
-	fn tick (& self, window: & gtk::ApplicationWindow) -> gtk::Continue {
+	fn tick (& self) -> gtk::Continue {
 
-		if ! self.solve_one_cell () {
-			return gtk::Continue (false);
+		if self.solve_one_cell () {
+
+			let state = self.state.borrow_mut ();
+			let window = state.window.clone ().unwrap ();
+
+			window.queue_draw ();
+
+			gtk::Continue (true)
+
+		} else {
+
+			let mut state = self.state.borrow_mut ();
+
+			state.timeout_source = None;
+
+			gtk::Continue (false)
+
 		}
-
-		window.queue_draw ();
-
-		gtk::Continue (true)
 
 	}
 
@@ -313,6 +337,16 @@ impl SolverWindow {
 			context.rel_line_to (0.0, grid_height);
 			context.stroke ();
 
+		}
+
+	}
+
+	fn destroy (& self) {
+
+		let mut state = self.state.borrow_mut ();
+
+		if let Some (timeout_source) = state.timeout_source.take () {
+			glib::source::source_remove (timeout_source);
 		}
 
 	}
