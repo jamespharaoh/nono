@@ -1,4 +1,5 @@
 #![ allow (unused_parens) ]
+#![ warn (rust_2018_idioms) ]
 
 pub mod data;
 pub mod grid_printer;

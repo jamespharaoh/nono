@@ -20,7 +20,7 @@ impl Clues {
 
 	pub fn load_file (
 		filename: & Path,
-	) -> Result <Clues, Box <Error>> {
+	) -> Result <Clues, Box <dyn Error>> {
 
 		let mut file = File::open (
 			filename,
@@ -31,8 +31,8 @@ impl Clues {
 	}
 
 	pub fn load (
-		reader: & mut io::Read,
-	) -> Result <Clues, Box <Error>> {
+		reader: & mut dyn io::Read,
+	) -> Result <Clues, Box <dyn Error>> {
 
 		let reader = BufReader::new (
 			reader,

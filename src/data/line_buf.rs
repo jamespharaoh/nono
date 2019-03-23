@@ -140,7 +140,7 @@ impl fmt::Debug for LineBuf {
 
 	fn fmt (
 		& self,
-		formatter: & mut fmt::Formatter,
+		formatter: & mut fmt::Formatter <'_>,
 	) -> fmt::Result {
 		fmt::Debug::fmt (& self, formatter)
 	}

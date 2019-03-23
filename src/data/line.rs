@@ -40,11 +40,11 @@ impl Line {
 		! self.iter ().any (Cell::is_unknown)
 	}
 
-	pub fn iter (& self) -> Cloned <slice::Iter <Cell>> {
+	pub fn iter (& self) -> Cloned <slice::Iter <'_, Cell>> {
 		self.cells.iter ().cloned ()
 	}
 
-	pub fn iter_mut (& mut self) -> slice::IterMut <Cell> {
+	pub fn iter_mut (& mut self) -> slice::IterMut <'_, Cell> {
 		self.cells.iter_mut ()
 	}
 
@@ -144,7 +144,7 @@ impl IndexMut <Range <LineSize>> for Line {
 
 impl fmt::Debug for Line {
 
-	fn fmt (& self, formatter: & mut fmt::Formatter) -> fmt::Result {
+	fn fmt (& self, formatter: & mut fmt::Formatter <'_>) -> fmt::Result {
 
 		write! (
 			formatter,

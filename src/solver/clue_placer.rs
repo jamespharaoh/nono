@@ -3,7 +3,7 @@ use crate::data::*;
 pub fn place_clue (
 	line: & Line,
 	size: LineSize,
-) -> CluePlacer {
+) -> CluePlacer <'_> {
 
 	CluePlacer::new (
 		line,
@@ -23,7 +23,7 @@ impl <'a> CluePlacer <'a> {
 	fn new (
 		line: & Line,
 		size: LineSize,
-	) -> CluePlacer {
+	) -> CluePlacer <'_> {
 
 		CluePlacer {
 			line: line,

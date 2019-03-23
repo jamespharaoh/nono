@@ -88,7 +88,7 @@ impl GridPrinter {
 
 	pub fn print (
 		& mut self,
-		writer: & mut io::Write,
+		writer: & mut dyn io::Write,
 		grid: & Grid,
 	) -> io::Result <()> {
 

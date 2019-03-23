@@ -1,5 +1,3 @@
-extern crate stats_alloc;
-
 use std::alloc::System;
 use std::env;
 use std::mem;
