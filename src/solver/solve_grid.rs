@@ -74,6 +74,10 @@ impl GridSolver {
 
 	}
 
+	pub fn clues (& self) -> & Clues {
+		& self.clues
+	}
+
 	pub fn grid (& self) -> & Grid {
 		& self.grid
 	}

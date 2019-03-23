@@ -8,6 +8,7 @@ extern crate gtk;
 
 use gio::prelude::*;
 use gtk::prelude::*;
+use gtk::SettingsExt;
 
 use std::cell::RefCell;
 use std::env;
@@ -16,10 +17,12 @@ use std::rc::Rc;
 
 use nono::*;
 
-const BORDER_SIZE: f64 = 20.5;
+const BORDER_SIZE: f64 = 20.0;
 const CELL_SIZE: f64 = 20.0;
 const THICK_LINE_SIZE: f64 = 3.0;
 const THIN_LINE_SIZE: f64 = 1.0;
+const CLUE_FONT_SIZE: f64 = 14.0;
+const CLUE_GAP: f64 = 2.0;
 
 fn main () {
 
@@ -94,10 +97,17 @@ struct SolverWindow {
 struct SolverWindowState {
 	solver: GridSolver,
 	palette: Palette,
-	grid_image_width: i32,
-	grid_image_height: i32,
+	dimensions: SolverWindowDimensions,
 	window: Option <gtk::ApplicationWindow>,
 	timeout_source: Option <glib::source::SourceId>,
+}
+
+#[ derive (Default) ]
+struct SolverWindowDimensions {
+	size: Size,
+	grid: Rectangle,
+	row_clues: Rectangle,
+	col_clues: Rectangle,
 }
 
 impl SolverWindow {
@@ -116,8 +126,7 @@ impl SolverWindow {
 			state: Rc::new (RefCell::new (SolverWindowState {
 				solver: solver,
 				palette: Palette::new (),
-				grid_image_width: 0,
-				grid_image_height: 0,
+				dimensions: Default::default (),
 				window: None,
 				timeout_source: None,
 			})),
@@ -150,15 +159,11 @@ impl SolverWindow {
 
 		window.show_all ();
 
-		state.grid_image_width = (0.0
-			+ CELL_SIZE * state.solver.grid ().num_cols () as f64
-			+ BORDER_SIZE * 2.0
-		) as i32;
-
-		state.grid_image_height = (0.0
-			+ CELL_SIZE * state.solver.grid ().num_rows () as f64
-			+ BORDER_SIZE * 2.0
-		) as i32;
+		state.dimensions = Self::calculate_dimensions (
+			& state.solver.clues (),
+			& state.solver.grid (),
+			& drawing_area,
+		);
 
 		let self_clone = self.clone ();
 		state.timeout_source = Some (
@@ -169,6 +174,90 @@ impl SolverWindow {
 		window.connect_destroy (move |_window|
 			self_clone.destroy (),
 		);
+
+	}
+
+	fn calculate_dimensions (
+		clues: & Clues,
+		grid: & Grid,
+		drawing_area: & gtk::DrawingArea,
+	) -> SolverWindowDimensions {
+
+		// sizes
+
+		let max_row_clues = clues.rows ().map (Vec::len).max ().unwrap_or (0);
+		let max_col_clues = clues.cols ().map (Vec::len).max ().unwrap_or (0);
+
+		let grid_size = Size {
+			width: CELL_SIZE * grid.num_cols () as f64 + THICK_LINE_SIZE,
+			height: CELL_SIZE * grid.num_rows () as f64 + THICK_LINE_SIZE,
+		};
+
+		let row_clues_size = Size {
+			width: CELL_SIZE * max_row_clues as f64,
+			height: CELL_SIZE * grid.num_rows () as f64,
+		};
+
+		let col_clues_size = Size {
+			width: CELL_SIZE * grid.num_cols () as f64,
+			height: CELL_SIZE * max_col_clues as f64,
+		};
+
+		let content_size = Size {
+
+			width: (0.0
+				+ BORDER_SIZE
+				+ row_clues_size.width
+				+ CLUE_GAP
+				+ grid_size.width
+				+ BORDER_SIZE
+			),
+
+			height: (0.0
+				+ BORDER_SIZE
+				+ grid_size.height
+				+ CLUE_GAP
+				+ col_clues_size.height
+				+ BORDER_SIZE
+			),
+
+		};
+
+		let row_clues_position = Position {
+			horizontal: BORDER_SIZE,
+			vertical: BORDER_SIZE + col_clues_size.height + CLUE_GAP + THICK_LINE_SIZE / 2.0,
+		};
+
+		let col_clues_position = Position {
+			horizontal: BORDER_SIZE + row_clues_size.width + CLUE_GAP + THICK_LINE_SIZE / 2.0,
+			vertical: BORDER_SIZE,
+		};
+
+		let grid_position = Position {
+			horizontal: content_size.width - BORDER_SIZE - grid_size.width,
+			vertical: content_size.height - BORDER_SIZE - grid_size.height,
+		};
+
+		SolverWindowDimensions {
+
+			size: content_size,
+
+			grid: Rectangle::from ( (
+				grid_position,
+				grid_size,
+			) ),
+
+			col_clues: Rectangle::from ( (
+				col_clues_position,
+				col_clues_size,
+			) ),
+
+			row_clues: Rectangle::from ( (
+				row_clues_position,
+				row_clues_size,
+			) ),
+
+		}
 
 	}
 
@@ -221,34 +310,188 @@ impl SolverWindow {
 		context.set_source (& state.palette.background);
 		context.paint ();
 
-		// grid
+		// content
 
-		let image_width = state.grid_image_width as f64;
-		let image_height = state.grid_image_height as f64;
-		let image_ratio = image_width / image_height;
+		let content_width = state.dimensions.size.width;
+		let content_height = state.dimensions.size.height;
+		let content_ratio = content_width / content_height;
 
 		let native_width = drawing_area.get_allocated_width () as f64;
 		let native_height = drawing_area.get_allocated_height () as f64;
 		let native_ratio = native_width / native_height;
 
-		let scale = if native_ratio > image_ratio {
-			native_height / image_height
+		let scale = if native_ratio > content_ratio {
+			native_height / content_height
 		} else {
-			native_width / image_width
+			native_width / content_width
 		};
 
 		context.translate (
-			(native_width - image_width * scale) / 2.0,
-			(native_height - image_height * scale) / 2.0,
+			(native_width - content_width * scale) / 2.0,
+			(native_height - content_height * scale) / 2.0,
 		);
 
 		context.scale (scale, scale);
 
+		Self::draw_row_clues (& state, & context);
+		Self::draw_col_clues (& state, & context);
 		Self::draw_grid (& state, & context);
 
 		// return
 
 		gtk::Inhibit (false)
+
+	}
+
+	fn draw_row_clues (
+		state: & SolverWindowState,
+		context: & cairo::Context,
+	) {
+
+		let clues = state.solver.clues ();
+		let palette = & state.palette;
+
+		context.save ();
+
+		context.translate (
+			state.dimensions.row_clues.right,
+			state.dimensions.row_clues.top,
+		);
+
+		let gtk_settings = gtk::Settings::get_default ().unwrap ();
+		let gtk_font_name = gtk_settings.get_property_gtk_font_name ().unwrap ();
+
+		let font_name = & gtk_font_name [
+			0 .. gtk_font_name.chars ().rev ()
+				.skip_while (|& ch| ch.is_ascii_digit ())
+				.skip_while (|& ch| ch.is_whitespace ())
+				.count ()
+		];
+
+		let font_face = context.select_font_face (
+			& font_name,
+			cairo::FontSlant::Normal,
+			cairo::FontWeight::Normal,
+		);
+
+		context.set_font_size (CLUE_FONT_SIZE);
+
+		for (row_index, row_clues) in clues.rows ().enumerate () {
+
+			for (clue_index, clue) in row_clues.iter ().rev ().enumerate () {
+
+				let text = format! ("{}", clue);
+				let text_extents = context.text_extents (& text);
+
+				let clue_position = Position {
+					horizontal: - CELL_SIZE * clue_index as f64,
+					vertical: CELL_SIZE * row_index as f64,
+				};
+
+				context.rectangle (
+					clue_position.horizontal - CELL_SIZE,
+					clue_position.vertical,
+					CELL_SIZE,
+					CELL_SIZE,
+				);
+
+				context.set_source (& state.palette.clue_box);
+				context.fill ();
+
+				context.move_to (
+					clue_position.horizontal,
+					clue_position.vertical,
+				);
+
+				context.rel_move_to (
+					- (CELL_SIZE + text_extents.x_advance) / 2.0,
+					(CELL_SIZE + text_extents.height) / 2.0,
+				);
+
+				context.set_source (& palette.clue_text);
+				context.show_text (& text);
+
+			}
+
+		}
+
+		context.restore ();
+
+	}
+
+	fn draw_col_clues (
+		state: & SolverWindowState,
+		context: & cairo::Context,
+	) {
+
+		let clues = state.solver.clues ();
+		let palette = & state.palette;
+
+		context.save ();
+
+		context.translate (
+			state.dimensions.col_clues.left,
+			state.dimensions.col_clues.bottom,
+		);
+
+		let gtk_settings = gtk::Settings::get_default ().unwrap ();
+		let gtk_font_name = gtk_settings.get_property_gtk_font_name ().unwrap ();
+
+		let font_name = & gtk_font_name [
+			0 .. gtk_font_name.chars ().rev ()
+				.skip_while (|& ch| ch.is_ascii_digit ())
+				.skip_while (|& ch| ch.is_whitespace ())
+				.count ()
+		];
+
+		let font_face = context.select_font_face (
+			& font_name,
+			cairo::FontSlant::Normal,
+			cairo::FontWeight::Normal,
+		);
+
+		context.set_font_size (CLUE_FONT_SIZE);
+
+		for (col_index, col_clues) in clues.cols ().enumerate () {
+
+			for (clue_index, clue) in col_clues.iter ().rev ().enumerate () {
+
+				let text = format! ("{}", clue);
+				let text_extents = context.text_extents (& text);
+
+				let clue_position = Position {
+					horizontal: CELL_SIZE * col_index as f64,
+					vertical: - CELL_SIZE * clue_index as f64,
+				};
+
+				context.rectangle (
+					clue_position.horizontal,
+					clue_position.vertical - CELL_SIZE,
+					CELL_SIZE,
+					CELL_SIZE,
+				);
+
+				context.set_source (& state.palette.clue_box);
+				context.fill ();
+
+				context.move_to (
+					clue_position.horizontal,
+					clue_position.vertical,
+				);
+
+				context.rel_move_to (
+					(CELL_SIZE - text_extents.x_advance) / 2.0,
+					- (CELL_SIZE - text_extents.height) / 2.0,
+				);
+
+				context.set_source (& palette.clue_text);
+				context.show_text (& text);
+
+			}
+
+		}
+
+		context.restore ();
 
 	}
 
@@ -259,18 +502,19 @@ impl SolverWindow {
 
 		let grid = state.solver.grid ();
 		let palette = & state.palette;
+		let grid_size = state.dimensions.grid.size ();
 
-		// grid dimensions
+		let grid_size_internal = Size {
+			width: grid_size.width - THICK_LINE_SIZE,
+			height: grid_size.height - THICK_LINE_SIZE,
+		};
 
-		let grid_left = BORDER_SIZE;
-		let grid_top = BORDER_SIZE;
-		let grid_width = CELL_SIZE * grid.num_cols () as f64;
-		let grid_height = CELL_SIZE * grid.num_rows () as f64;
+		context.save ();
 
-		// background
-
-		context.set_source (& palette.background);
-		context.paint ();
+		context.translate (
+			state.dimensions.grid.left + THICK_LINE_SIZE / 2.0,
+			state.dimensions.grid.top + THICK_LINE_SIZE / 2.0,
+		);
 
 		// grid cells
 
@@ -289,10 +533,10 @@ impl SolverWindow {
 				);
 
 				context.rectangle (
-					grid_left + CELL_SIZE * col_index as f64,
-					grid_top + CELL_SIZE * row_index as f64,
-					CELL_SIZE,
-					CELL_SIZE,
+					CELL_SIZE * col_index as f64,
+					CELL_SIZE * row_index as f64,
+					CELL_SIZE + THIN_LINE_SIZE,
+					CELL_SIZE + THIN_LINE_SIZE,
 				);
 
 				context.fill ();
@@ -317,8 +561,8 @@ impl SolverWindow {
 				},
 			);
 
-			context.move_to (grid_left, grid_top + CELL_SIZE * row_index as f64);
-			context.rel_line_to (grid_width, 0.0);
+			context.move_to (0.0, CELL_SIZE * row_index as f64);
+			context.rel_line_to (grid_size_internal.width, 0.0);
 			context.stroke ();
 
 		}
@@ -333,11 +577,13 @@ impl SolverWindow {
 				},
 			);
 
-			context.move_to (grid_left + CELL_SIZE * col_index as f64, grid_top);
-			context.rel_line_to (0.0, grid_height);
+			context.move_to (CELL_SIZE * col_index as f64, 0.0);
+			context.rel_line_to (0.0, grid_size_internal.height);
 			context.stroke ();
 
 		}
+
+		context.restore ();
 
 	}
 
@@ -349,6 +595,86 @@ impl SolverWindow {
 			glib::source::source_remove (timeout_source);
 		}
 
+	}
+
+}
+
+#[ derive (Clone, Copy, Debug, Default) ]
+struct Position {
+	horizontal: f64,
+	vertical: f64,
+}
+
+impl Position {
+
+	fn origin () -> Position {
+		Position {
+			horizontal: 0.0,
+			vertical: 0.0,
+		}
+	}
+
+}
+
+impl From <(f64, f64)> for Position {
+
+	fn from (tuple: (f64, f64)) -> Position {
+		Position {
+			horizontal: tuple.0,
+			vertical: tuple.1,
+		}
+	}
+
+}
+
+#[ derive (Clone, Copy, Debug, Default) ]
+struct Size {
+	width: f64,
+	height: f64,
+}
+
+impl From <(f64, f64)> for Size {
+
+	fn from (tuple: (f64, f64)) -> Size {
+		Size {
+			width: tuple.0,
+			height: tuple.1,
+		}
+	}
+
+}
+
+#[ derive (Clone, Copy, Debug, Default) ]
+struct Rectangle {
+	left: f64,
+	top: f64,
+	right: f64,
+	bottom: f64,
+}
+
+impl From <(Position, Size)> for Rectangle {
+
+	fn from (tuple: (Position, Size)) -> Rectangle {
+		Rectangle {
+			left: tuple.0.horizontal,
+			top: tuple.0.vertical,
+			right: tuple.0.horizontal + tuple.1.width,
+			bottom: tuple.0.vertical + tuple.1.height,
+		}
+	}
+
+}
+
+impl Rectangle {
+
+	fn width (& self) -> f64 { self.right - self.left }
+	fn height (& self) -> f64 { self.bottom - self.top }
+
+	fn size (& self) -> Size {
+		Size {
+			width: self.width (),
+			height: self.height (),
+		}
 	}
 
 }
@@ -385,6 +711,8 @@ impl io::Read for InputStreamReader {
 struct Palette {
 	background: cairo::Pattern,
 	lines: cairo::Pattern,
+	clue_text: cairo::Pattern,
+	clue_box: cairo::Pattern,
 	unknown: cairo::Pattern,
 	filled: cairo::Pattern,
 	empty: cairo::Pattern,
@@ -398,6 +726,8 @@ impl Palette {
 		Palette {
 			background: Self::from_rgb (0.85, 0.85, 0.85),
 			lines:      Self::from_rgb (0.00, 0.00, 0.00),
+			clue_text:  Self::from_rgb (0.00, 0.00, 0.00),
+			clue_box:   Self::from_rgb (0.85, 0.85, 0.85),
 			unknown:    Self::from_rgb (0.70, 0.70, 0.70),
 			filled:     Self::from_rgb (0.10, 0.10, 0.10),
 			empty:      Self::from_rgb (1.00, 1.00, 1.00),
