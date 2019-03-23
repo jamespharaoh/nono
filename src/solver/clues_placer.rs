@@ -1,9 +1,18 @@
-use std::iter;
+use std::mem;
 
-use crate::data::*;
-use crate::solver::*;
+use crate::*;
 
-pub struct PlaceCluesIter <'a> {
+pub fn place_clues <'a> (
+	line: & 'a Line,
+	clues: & 'a [LineSize],
+) -> CluesPlacerIter <'a> {
+
+	CluesPlacer::new (line, clues).into_iter ()
+
+}
+
+#[ derive (Default) ]
+pub struct CluesPlacer <'a> {
 	cache: Cache,
 	stack: Vec <Frame <'a>>,
 	line: & 'a Line,
@@ -11,85 +20,72 @@ pub struct PlaceCluesIter <'a> {
 	started: bool,
 }
 
-struct Cache {
-	data: Vec <bool>,
-	line_size: LineSize,
-}
-
 struct Frame <'a> {
 	offset: LineSize,
-	place_clue_iter: PlaceClueIter <'a>,
+	clue_placer: CluePlacer <'a>,
 	position: LineSize,
 	found: bool,
 }
 
-pub fn place_clues <'a> (
-	line: & 'a Line,
-	clues: & 'a [LineSize],
-) -> PlaceCluesIter <'a> {
+impl <'a> CluesPlacer <'a> {
 
-	PlaceCluesIter {
-		cache: Cache::new (clues.len (), line.len ()),
-		stack: Vec::with_capacity (clues.len ()),
-		line: line,
-		clues: clues,
-		started: false,
-	}
+	pub fn new (
+		line: & 'a Line,
+		clues: & 'a [LineSize],
+	) -> CluesPlacer <'a> {
 
-}
+println! ("CluesPlacer::new");
 
-impl <'a> PlaceCluesIter <'a> {
-
-	fn push (
-		& mut self,
-		depth: usize,
-		offset: LineSize,
-	) -> bool {
-
-		if self.clues.len () == depth {
-			return self.line.iter ().skip (offset as usize).all (Cell::can_empty);
+		CluesPlacer {
+			cache: Cache::new (clues.len (), line.len ()),
+			stack: Vec::with_capacity (clues.len ()),
+			line: line,
+			clues: clues,
+			started: false,
 		}
-
-		if offset + self.clues [depth] > self.line.len () {
-			return false;
-		}
-
-		if self.cache.is_bad (depth, offset) {
-			return false;
-		}
-
-		let place_clue_iter = place_clue (
-			& self.line [offset .. ],
-			self.clues [depth],
-		);
-
-		self.stack.push (Frame {
-			offset: offset,
-			place_clue_iter: place_clue_iter,
-			position: 0,
-			found: false,
-		});
-
-		false
 
 	}
 
-}
+	pub fn into_default <'b> (
+		self,
+	) -> CluesPlacer <'static> {
 
-impl <'a> Iterator for PlaceCluesIter <'a> {
+		CluesPlacer {
+			cache: self.cache,
+			stack: unsafe { mem::transmute (self.stack.into_default ()) },
+			line: Default::default (),
+			clues: Default::default (),
+			started: false,
+		}
 
-	type Item = Vec <LineSize>;
+	}
 
-	fn next (
-		& mut self,
-	) -> Option <Vec <LineSize>> {
+	pub fn into_new <'b> (
+		self,
+		line: & 'b Line,
+		clues: & 'b [LineSize],
+	) -> CluesPlacer <'b> {
+
+		let copy = self.into_default ();
+
+		CluesPlacer {
+			cache: copy.cache.into_new (clues.len (), line.len ()),
+			stack: copy.stack,
+			line: line,
+			clues: clues,
+			started: false,
+		}
+
+	}
+
+	pub fn advance (& mut self) -> bool {
 
 		if ! self.started {
 
 			self.started = true;
 
 			if self.push (0, 0) {
-				return Some (vec! []);
+				return true;
 			}
 
 		}
@@ -98,10 +94,10 @@ impl <'a> Iterator for PlaceCluesIter <'a> {
 
 			let mut frame = match self.stack.pop () {
 				Some (val) => val,
-				None => return None,
+				None => return false,
 			};
 
-			frame.position = match frame.place_clue_iter.next () {
+			frame.position = match frame.clue_placer.next () {
 				Some (val) => val + frame.offset,
 				None => {
 
@@ -128,11 +124,7 @@ impl <'a> Iterator for PlaceCluesIter <'a> {
 					frame.found = true;
 				}
 
-				return Some (
-					self.stack.iter ().map (
-						|frame| frame.position
-					).collect (),
-				);
+				return true;
 
 			}
 
@@ -140,6 +132,86 @@ impl <'a> Iterator for PlaceCluesIter <'a> {
 
 	}
 
+	pub fn current (& 'a self) -> impl Iterator <Item = LineSize> + 'a {
+
+		self.stack.iter ().map (
+			|frame| frame.position
+		)
+
+	}
+
+	fn push (
+		& mut self,
+		depth: usize,
+		offset: LineSize,
+	) -> bool {
+
+		if self.clues.len () == depth {
+			return self.line.iter ().skip (offset as usize).all (Cell::can_empty);
+		}
+
+		if offset + self.clues [depth] > self.line.len () {
+			return false;
+		}
+
+		if self.cache.is_bad (depth, offset) {
+			return false;
+		}
+
+		let clue_placer = place_clue (
+			& self.line [offset .. ],
+			self.clues [depth],
+		);
+
+		self.stack.push (Frame {
+			offset: offset,
+			clue_placer: clue_placer,
+			position: 0,
+			found: false,
+		});
+
+		false
+
+	}
+
+}
+
+impl <'a> IntoIterator for CluesPlacer <'a> {
+
+	type Item = Vec <LineSize>;
+	type IntoIter = CluesPlacerIter <'a>;
+
+	fn into_iter (self) -> CluesPlacerIter <'a> {
+		CluesPlacerIter {
+			inner: self,
+		}
+	}
+
+}
+
+pub struct CluesPlacerIter <'a> {
+	inner: CluesPlacer <'a>,
+}
+
+impl <'a> Iterator for CluesPlacerIter <'a> {
+
+	type Item = Vec <LineSize>;
+
+	fn next (& mut self) -> Option <Vec <LineSize>> {
+		if self.inner.advance () {
+			Some (self.inner.current ().collect ())
+		} else {
+			None
+		}
+
+	}
+
+}
+
+#[ derive (Default) ]
+struct Cache {
+	data: Vec <bool>,
+	line_size: LineSize,
 }
 
 impl Cache {
@@ -149,12 +221,27 @@ impl Cache {
 		line_size: LineSize,
 	) -> Cache {
 
-		Cache {
-			data: iter::repeat (false).take (
-				num_clues * line_size as usize,
-			).collect (),
-			line_size: line_size,
-		}
+		let cache: Cache = Default::default ();
+
+		cache.into_new (
+			num_clues,
+			line_size,
+		)
+
+	}
+
+	fn into_new (
+		mut self,
+		num_clues: usize,
+		line_size: LineSize,
+	) -> Cache {
+
+		self.data.truncate (0);
+		self.data.resize (num_clues * line_size as usize, false);
+
+		self.line_size = line_size;
+
+		self
 
 	}
 

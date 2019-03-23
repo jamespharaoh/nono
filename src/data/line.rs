@@ -1,6 +1,11 @@
 use std::fmt;
+use std::iter::Cloned;
 use std::mem;
-use std::ops;
+use std::ops::Index;
+use std::ops::IndexMut;
+use std::ops::Range;
+use std::ops::RangeFrom;
+use std::ops::RangeTo;
 use std::slice;
 
 use crate::data::*;
@@ -15,44 +20,40 @@ pub struct Line {
 
 impl Line {
 
-	pub fn new (
-		cells: & [Cell],
-	) -> & Line {
-		unsafe {
-			mem::transmute (cells)
-		}
+	pub fn new (cells: & [Cell]) -> & Line {
+		unsafe { mem::transmute (cells) }
 	}
 
-	pub fn new_mut (
-		cells: & mut [Cell],
-	) -> & mut Line {
-		unsafe {
-			mem::transmute (cells)
-		}
+	pub fn new_mut (cells: & mut [Cell]) -> & mut Line {
+		unsafe { mem::transmute (cells) }
 	}
 
-	pub fn len (
-		& self,
-	) -> LineSize {
+	pub fn cells (& self) -> & [Cell] {
+		& self.cells
+	}
+
+	pub fn len (& self) -> LineSize {
 		self.cells.len () as LineSize
 	}
 
-	pub fn is_solved (
-		& self,
-	) -> bool {
-		! self.cells.iter ().any (Cell::is_unknown)
+	pub fn is_solved (& self) -> bool {
+		! self.iter ().any (Cell::is_unknown)
 	}
 
-	pub fn iter (
-		& self,
-	) -> slice::Iter <Cell> {
-		self.cells.iter ()
+	pub fn iter (& self) -> Cloned <slice::Iter <Cell>> {
+		self.cells.iter ().cloned ()
 	}
 
-	pub fn iter_mut (
-		& mut self,
-	) -> slice::IterMut <Cell> {
+	pub fn iter_mut (& mut self) -> slice::IterMut <Cell> {
 		self.cells.iter_mut ()
+	}
+
+}
+
+impl <'a> Default for & 'a Line {
+
+	fn default () -> & 'a Line {
+		Line::new (Default::default ())
 	}
 
 }
@@ -61,50 +62,29 @@ impl ToOwned for Line {
 
 	type Owned = LineBuf;
 
-	fn to_owned (
-		& self,
-	) -> LineBuf {
+	fn to_owned (& self) -> LineBuf {
 		LineBuf::from (self.cells.to_owned ())
 	}
 
 }
 
-impl <'a> IntoIterator for & 'a Line {
-
-	type Item = & 'a Cell;
-	type IntoIter = slice::Iter <'a, Cell>;
-
-	fn into_iter (
-		self,
-	) -> slice::Iter <'a, Cell> {
-		self.cells.iter ()
-	}
-
-}
-
-impl ops::Index <LineSize> for Line {
+impl Index <LineSize> for Line {
 
 	type Output = Cell;
 
-	fn index (
-		& self,
-		index: LineSize,
-	) -> & Cell {
+	fn index (& self, index: LineSize) -> & Cell {
 		& self.cells [index as usize]
 	}
 
 }
 
-impl ops::Index <ops::Range <LineSize>> for Line {
+impl Index <Range <LineSize>> for Line {
 
 	type Output = Line;
 
-	fn index (
-		& self,
-		range: ops::Range <LineSize>,
-	) -> & Line {
+	fn index (& self, range: Range <LineSize>) -> & Line {
 		& Line::new (& self.cells [
-			ops::Range {
+			Range {
 				start: range.start as usize,
 				end: range.end as usize,
 			}
@@ -113,16 +93,13 @@ impl ops::Index <ops::Range <LineSize>> for Line {
 
 }
 
-impl ops::Index <ops::RangeFrom <LineSize>> for Line {
+impl Index <RangeFrom <LineSize>> for Line {
 
 	type Output = Line;
 
-	fn index (
-		& self,
-		range: ops::RangeFrom <LineSize>,
-	) -> & Line {
+	fn index (& self, range: RangeFrom <LineSize>) -> & Line {
 		& Line::new (& self.cells [
-			ops::RangeFrom {
+			RangeFrom {
 				start: range.start as usize,
 			}
 		])
@@ -130,14 +107,33 @@ impl ops::Index <ops::RangeFrom <LineSize>> for Line {
 
 }
 
-impl ops::IndexMut <ops::Range <LineSize>> for Line {
+impl Index <RangeTo <LineSize>> for Line {
 
-	fn index_mut <'a> (
-		& 'a mut self,
-		range: ops::Range <LineSize>,
-	) -> & 'a mut Line {
+	type Output = Line;
+
+	fn index (& self, range: RangeTo <LineSize>) -> & Line {
+		& Line::new (& self.cells [
+			RangeTo {
+				end: range.end as usize,
+			}
+		])
+	}
+
+}
+
+impl IndexMut <LineSize> for Line {
+
+	fn index_mut <'a> (& 'a mut self, index: LineSize) -> & 'a mut Cell {
+		& mut self.cells [index as usize]
+	}
+
+}
+
+impl IndexMut <Range <LineSize>> for Line {
+
+	fn index_mut <'a> (& 'a mut self, range: Range <LineSize>) -> & 'a mut Line {
 		Line::new_mut (& mut self.cells [
-			ops::Range {
+			Range {
 				start: range.start as usize,
 				end: range.end as usize,
 			}
@@ -148,14 +144,11 @@ impl ops::IndexMut <ops::Range <LineSize>> for Line {
 
 impl fmt::Debug for Line {
 
-	fn fmt (
-		& self,
-		formatter: & mut fmt::Formatter,
-	) -> fmt::Result {
+	fn fmt (& self, formatter: & mut fmt::Formatter) -> fmt::Result {
 
 		write! (
 			formatter,
-			"Line [{}]",
+			"[{}]",
 			self.cells.iter ().map (
 				|& cell|
 
@@ -176,6 +169,69 @@ impl fmt::Debug for Line {
 
 }
 
+pub trait IntoLine {
+
+	type Iter: Iterator <Item = Cell>;
+
+	fn into (self) -> Self::Iter;
+
+}
+
+impl <
+	IntoCell: Into <Cell>,
+	Source: Iterator <Item = IntoCell> + Sized,
+> IntoLine for Source {
+
+	type Iter = IntoLineIter <IntoCell, Source>;
+
+	fn into (self) -> IntoLineIter <IntoCell, Source> {
+		IntoLineIter {
+			source: self.into_iter (),
+		}
+	}
+
+}
+
+impl <'a> IntoLine for & 'a Line {
+
+	type Iter = Cloned <slice::Iter <'a, Cell>>;
+
+	fn into (self) -> Cloned <slice::Iter <'a, Cell>> {
+		self.cells ().iter ().cloned ()
+	}
+
+}
+
+impl <'a> IntoLine for & 'a LineBuf {
+
+	type Iter = Cloned <slice::Iter <'a, Cell>>;
+
+	fn into (self) -> Cloned <slice::Iter <'a, Cell>> {
+		self.cells ().iter ().cloned ()
+	}
+
+}
+
+pub struct IntoLineIter <
+	IntoCell: Into <Cell>,
+	Source: Iterator <Item = IntoCell> + Sized,
+> {
+	source: Source,
+}
+
+impl <
+	IntoCell: Into <Cell>,
+	Source: Iterator <Item = IntoCell> + Sized,
+> Iterator for IntoLineIter <IntoCell, Source> {
+
+	type Item = Cell;
+
+	fn next (& mut self) -> Option <Cell> {
+		self.source.next ().map (Into::into)
+	}
+
+}
+
 #[ cfg (test) ]
 mod tests {
 
@@ -187,14 +243,14 @@ mod tests {
 		assert_eq! (
 			format! (
 				"{:?}",
-				LineBuf::from (vec! [
+				Line::new (& vec! [
 					Cell::UNKNOWN,
 					Cell::EMPTY,
 					Cell::FILLED,
 					Cell::ERROR,
-				]).as_ref (),
+				]),
 			),
-			"Line [- #!]",
+			"[- #!]",
 		);
 
 	}

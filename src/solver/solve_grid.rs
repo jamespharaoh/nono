@@ -1,5 +1,5 @@
 use std::iter;
-use std::ops;
+use std::mem;
 
 use crate::data::*;
 use crate::solver::*;
@@ -12,13 +12,19 @@ pub struct GridSolver {
 	stats: GridSolverStats,
 	changed_rows: Vec <bool>,
 	changed_cols: Vec <bool>,
+	line_solver: LineSolver,
 
+	state: State,
 	vertical: bool,
 	index: LineSize,
 	index_changed: bool,
-	line_solver: Option <iter::Zip <ops::RangeFrom <LineSize>, LineSolver>>,
-	complete: bool,
 
+}
+
+enum State {
+	Scanning,
+	Solving (LineSize),
+	Complete,
 }
 
 #[ derive (Clone, Copy, Debug) ]
@@ -63,15 +69,19 @@ impl GridSolver {
 			stats: GridSolverStats::new (),
 			changed_rows: changed_rows,
 			changed_cols: changed_cols,
+			line_solver: Default::default (),
 
 			vertical: false,
 			index: 0,
 			index_changed: true,
-			line_solver: None,
-			complete: false,
+			state: State::Scanning,
 
 		}
 
+	}
+
+	pub fn release (self) -> (Clues, Grid) {
+		(self.clues, self.grid)
 	}
 
 	pub fn clues (& self) -> & Clues {
@@ -149,12 +159,12 @@ impl GridSolver {
 
 	fn get_line <'a> (
 		& 'a self,
-	) -> Box <Iterator <Item = & 'a Cell> + 'a> {
+	) -> GridIter <'a> {
 
 		if ! self.vertical {
-			Box::new (self.grid.row (self.index))
+			self.grid.row (self.index)
 		} else {
-			Box::new (self.grid.col (self.index))
+			self.grid.col (self.index)
 		}
 
 	}
@@ -181,20 +191,57 @@ impl GridSolver {
 
 	}
 
+	fn is_complete (& self) -> bool {
+		match self.state {
+			State::Complete => true,
+			_ => false,
+		}
+	}
+
+	fn is_solving (& self) -> bool {
+		match self.state {
+			State::Solving (..) => true,
+			_ => false,
+		}
+	}
+
+	fn next_cell (& mut self) -> Option <(LineSize, Cell)> {
+
+		match self.state {
+
+			State::Solving (ref mut cell_index) => {
+
+				if let Some (cell) = self.line_solver.next () {
+
+					let result = (* cell_index, cell);
+					* cell_index += 1;
+					Some (result)
+
+				} else {
+					None
+				}
+
+			},
+
+			_ => panic! (),
+
+		}
+
+	}
+
 	pub fn next (
 		& mut self,
 	) -> Option <GridSolverEvent> {
 
-		if self.complete {
+		if self.is_complete () {
 			return None;
 		}
 
 		loop {
 
-			if self.line_solver.is_some () {
+			if self.is_solving () {
 
-				if let Some ((cell_index, cell)) =
-					self.line_solver.as_mut ().unwrap ().next () {
+				if let Some ((cell_index, cell)) = self.next_cell () {
 
 					if cell == self.get_cell (cell_index) {
 						continue;
@@ -212,7 +259,7 @@ impl GridSolver {
 
 				}
 
-				self.line_solver = None;
+				self.state = State::Scanning;
 				self.unset_line_changed ();
 				self.stats.line_iterations += 1;
 
@@ -222,7 +269,7 @@ impl GridSolver {
 
 			if self.grid.is_solved () {
 				self.stats.grid_iterations += 1;
-				self.complete = true;
+				self.state = State::Complete;
 				return Some (GridSolverEvent::SolvedGrid);
 			}
 
@@ -245,17 +292,18 @@ impl GridSolver {
 
 			}
 
-			let existing_line = self.get_line ().collect::<LineBuf> ();
+			self.state = State::Solving (0);
 
-			self.line_solver = Some (
-				Iterator::zip (
-					ops::RangeFrom { start: 0 },
-					solve_line (
-						existing_line,
-						self.get_clues ().to_owned (),
-					).unwrap (),
-				),
-			);
+			let mut line_solver = Default::default ();
+			mem::swap (& mut line_solver, & mut self.line_solver);
+
+			self.line_solver = match line_solver.into_new (
+				self.get_line (),
+				self.get_clues (),
+			) {
+				Ok (val) => val,
+				Err (_) => panic! (),
+			};
 
 		}
 

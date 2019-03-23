@@ -101,7 +101,7 @@ impl GridPrinter {
 			for cell in grid.row (row_index) {
 
 				right.push_str (
-					match * cell {
+					match cell {
 						Cell::UNKNOWN => "▒▒",
 						Cell::EMPTY => "██",
 						Cell::FILLED => "  ",

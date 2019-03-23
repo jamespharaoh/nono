@@ -1,31 +1,31 @@
 use crate::data::*;
 
-pub struct PlaceClueIter <'a> {
-	line: & 'a Line,
-	size: LineSize,
-	start: LineSize,
-}
-
 pub fn place_clue (
 	line: & Line,
 	size: LineSize,
-) -> PlaceClueIter {
+) -> CluePlacer {
 
-	PlaceClueIter::new (
+	CluePlacer::new (
 		line,
 		size,
 	)
 
 }
 
-impl <'a> PlaceClueIter <'a> {
+pub struct CluePlacer <'a> {
+	line: & 'a Line,
+	size: LineSize,
+	start: LineSize,
+}
+
+impl <'a> CluePlacer <'a> {
 
 	fn new (
 		line: & Line,
 		size: LineSize,
-	) -> PlaceClueIter {
+	) -> CluePlacer {
 
-		PlaceClueIter {
+		CluePlacer {
 			line: line,
 			size: size,
 			start: 0,
@@ -35,7 +35,7 @@ impl <'a> PlaceClueIter <'a> {
 
 }
 
-impl <'a> Iterator for PlaceClueIter <'a> {
+impl <'a> Iterator for CluePlacer <'a> {
 
 	type Item = LineSize;
 

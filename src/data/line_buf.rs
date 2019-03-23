@@ -1,22 +1,34 @@
-use std::borrow;
-use std::cmp;
+use std::borrow::Borrow;
 use std::fmt;
 use std::iter;
-use std::ops;
+use std::iter::FromIterator;
+use std::ops::Deref;
+use std::ops::DerefMut;
 use std::slice;
 
-use crate::data::*;
+use crate::*;
 
-#[ derive (Clone, PartialEq) ]
+#[ derive (Default, PartialEq) ]
 pub struct LineBuf {
 	cells: Vec <Cell>,
 }
 
 impl LineBuf {
 
-	pub fn with_size (
-		size: LineSize,
+	pub fn into_copy_of <
+		MyIntoLine: IntoLine,
+	> (
+		self,
+		into_line: MyIntoLine,
 	) -> LineBuf {
+
+		LineBuf {
+			cells: self.cells.into_default ().into_extend (into_line.into ()),
+		}
+
+	}
+
+	pub fn with_size (size: LineSize) -> LineBuf {
 
 		LineBuf {
 			cells: iter::repeat (Cell::UNKNOWN).take (size as usize).collect (),
@@ -47,65 +59,39 @@ impl LineBuf {
 
 	}
 
-	pub fn is_solved (
-		& self,
-	) -> bool {
-		self.cells.iter ().all (Cell::is_solved)
-	}
-
-	pub fn len (
-		& self,
-	) -> LineSize {
-		self.cells.len () as LineSize
-	}
-
-	pub fn iter (
-		& self,
-	) -> slice::Iter <Cell> {
-		self.cells.iter ()
-	}
-
-	pub fn iter_mut (
-		& mut self,
-	) -> slice::IterMut <Cell> {
-		self.cells.iter_mut ()
+	pub fn capacity (& self) -> LineSize {
+		self.cells.capacity () as LineSize
 	}
 
 }
 
-impl cmp::PartialEq <Line> for LineBuf {
+impl Borrow <Line> for LineBuf {
 
-	fn eq (& self, other: & Line) -> bool {
-		self.as_ref () == other
+	fn borrow (& self) -> & Line {
+		self.deref ()
 	}
 
 }
 
-impl AsRef <Line> for LineBuf {
+impl Deref for LineBuf {
 
-	fn as_ref (& self) -> & Line {
-		& Line::new (& self.cells)
+	type Target = Line;
+
+	fn deref (& self) -> & Line {
+		Line::new (& self.cells)
 	}
 
 }
 
-impl AsMut <Line> for LineBuf {
+impl DerefMut for LineBuf {
 
-	fn as_mut (& mut self) -> & mut Line {
+	fn deref_mut (& mut self) -> & mut Line {
 		Line::new_mut (& mut self.cells)
 	}
 
 }
 
-impl borrow::Borrow <Line> for LineBuf {
-
-	fn borrow (& self) -> & Line {
-		& Line::new (& self.cells)
-	}
-
-}
-
-impl iter::FromIterator <Cell> for LineBuf {
+impl FromIterator <Cell> for LineBuf {
 
 	fn from_iter <Iter: IntoIterator <Item = Cell>> (
 		iter: Iter,
@@ -119,16 +105,12 @@ impl iter::FromIterator <Cell> for LineBuf {
 
 }
 
-impl <'a> iter::FromIterator <& 'a Cell> for LineBuf {
+impl IntoDefault for LineBuf {
 
-	fn from_iter <Iter: IntoIterator <Item = & 'a Cell>> (
-		iter: Iter,
-	) -> LineBuf {
-
+	fn into_default (self) -> LineBuf {
 		LineBuf {
-			cells: iter.into_iter ().cloned ().collect (),
+			cells: self.cells.into_default (),
 		}
-
 	}
 
 }
@@ -138,9 +120,7 @@ impl <'a> IntoIterator for & 'a LineBuf {
 	type Item = & 'a Cell;
 	type IntoIter = slice::Iter <'a, Cell>;
 
-	fn into_iter (
-		self,
-	) -> slice::Iter <'a, Cell> {
+	fn into_iter (self) -> slice::Iter <'a, Cell> {
 		self.cells.iter ()
 	}
 
@@ -148,70 +128,10 @@ impl <'a> IntoIterator for & 'a LineBuf {
 
 impl From <Vec <Cell>> for LineBuf {
 
-	fn from (
-		cells: Vec <Cell>,
-	) -> LineBuf {
+	fn from (cells: Vec <Cell>) -> LineBuf {
 		LineBuf {
 			cells: cells,
 		}
-	}
-
-}
-
-impl ops::Index <LineSize> for LineBuf {
-
-	type Output = Cell;
-
-	fn index (
-		& self,
-		index: LineSize,
-	) -> & Cell {
-		& self.cells [index as usize]
-	}
-
-}
-
-impl ops::IndexMut <LineSize> for LineBuf {
-
-	fn index_mut <'a> (
-		& 'a mut self,
-		index: LineSize,
-	) -> & 'a mut Cell {
-		& mut self.cells [index as usize]
-	}
-
-}
-
-impl ops::IndexMut <ops::Range <LineSize>> for LineBuf {
-
-	fn index_mut <'a> (
-		& 'a mut self,
-		range: ops::Range <LineSize>,
-	) -> & 'a mut Line {
-		& mut self.as_mut () [range]
-	}
-
-}
-
-impl ops::Index <ops::Range <LineSize>> for LineBuf {
-
-	type Output = Line;
-
-	fn index (
-		& self,
-		range: ops::Range <LineSize>,
-	) -> & Line {
-		& self.as_ref () [range]
-	}
-
-}
-
-impl ops::Deref for LineBuf {
-
-	type Target = Line;
-
-	fn deref (& self) -> & Line {
-		& self [ 0 .. self.len () ]
 	}
 
 }
@@ -222,7 +142,7 @@ impl fmt::Debug for LineBuf {
 		& self,
 		formatter: & mut fmt::Formatter,
 	) -> fmt::Result {
-		fmt::Debug::fmt (self.as_ref (), formatter)
+		fmt::Debug::fmt (& self, formatter)
 	}
 
 }

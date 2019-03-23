@@ -16,23 +16,23 @@ impl Cell {
 	pub const FILLED: Cell = Cell { bits: FILLED };
 	pub const UNKNOWN: Cell = Cell { bits: UNKNOWN };
 
-	pub fn is_error (& self) -> bool {
+	pub fn is_error (self) -> bool {
 		self.bits == ERROR
 	}
 
-	pub fn is_empty (& self) -> bool {
+	pub fn is_empty (self) -> bool {
 		self.bits == EMPTY
 	}
 
-	pub fn is_filled (& self) -> bool {
+	pub fn is_filled (self) -> bool {
 		self.bits == FILLED
 	}
 
-	pub fn is_unknown (& self) -> bool {
+	pub fn is_unknown (self) -> bool {
 		self.bits == UNKNOWN
 	}
 
-	pub fn is_solved (& self) -> bool {
+	pub fn is_solved (self) -> bool {
 		match self.bits {
 			EMPTY => true,
 			FILLED => true,
@@ -40,11 +40,11 @@ impl Cell {
 		}
 	}
 
-	pub fn can_empty (& self) -> bool {
+	pub fn can_empty (self) -> bool {
 		self.bits & EMPTY != ERROR
 	}
 
-	pub fn can_fill (& self) -> bool {
+	pub fn can_fill (self) -> bool {
 		self.bits & FILLED != ERROR
 	}
 

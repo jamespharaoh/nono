@@ -162,7 +162,6 @@ impl SolverWindow {
 		state.dimensions = Self::calculate_dimensions (
 			& state.solver.clues (),
 			& state.solver.grid (),
-			& drawing_area,
 		);
 
 		let self_clone = self.clone ();
@@ -180,7 +179,6 @@ impl SolverWindow {
 	fn calculate_dimensions (
 		clues: & Clues,
 		grid: & Grid,
-		drawing_area: & gtk::DrawingArea,
 	) -> SolverWindowDimensions {
 
 		// sizes
@@ -368,7 +366,7 @@ impl SolverWindow {
 				.count ()
 		];
 
-		let font_face = context.select_font_face (
+		context.select_font_face (
 			& font_name,
 			cairo::FontSlant::Normal,
 			cairo::FontWeight::Normal,
@@ -444,7 +442,7 @@ impl SolverWindow {
 				.count ()
 		];
 
-		let font_face = context.select_font_face (
+		context.select_font_face (
 			& font_name,
 			cairo::FontSlant::Normal,
 			cairo::FontWeight::Normal,
@@ -603,17 +601,6 @@ impl SolverWindow {
 struct Position {
 	horizontal: f64,
 	vertical: f64,
-}
-
-impl Position {
-
-	fn origin () -> Position {
-		Position {
-			horizontal: 0.0,
-			vertical: 0.0,
-		}
-	}
-
 }
 
 impl From <(f64, f64)> for Position {

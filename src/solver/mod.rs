@@ -1,10 +1,10 @@
-mod place_clue;
-mod place_clues;
+mod clue_placer;
+mod clues_placer;
+mod line_solver;
 mod solve_grid;
-mod solve_line;
 
-pub use place_clue::*;
-pub use place_clues::*;
+pub use clue_placer::*;
+pub use clues_placer::*;
+pub use line_solver::*;
 pub use solve_grid::*;
-pub use solve_line::*;
 
