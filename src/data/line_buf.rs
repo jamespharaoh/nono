@@ -16,14 +16,14 @@ pub struct LineBuf {
 impl LineBuf {
 
 	pub fn into_copy_of <
-		MyIntoLine: IntoLine,
+		LineIter: IntoIterator <Item = Cell>,
 	> (
 		self,
-		into_line: MyIntoLine,
+		line_iter: LineIter,
 	) -> LineBuf {
 
 		LineBuf {
-			cells: self.cells.into_default ().into_extend (into_line.into ()),
+			cells: self.cells.into_default ().into_extend (line_iter),
 		}
 
 	}
@@ -73,6 +73,17 @@ impl Borrow <Line> for LineBuf {
 
 }
 
+impl fmt::Debug for LineBuf {
+
+	fn fmt (
+		& self,
+		formatter: & mut fmt::Formatter <'_>,
+	) -> fmt::Result {
+		fmt::Debug::fmt (self.deref (), formatter)
+	}
+
+}
+
 impl Deref for LineBuf {
 
 	type Target = Line;
@@ -87,6 +98,16 @@ impl DerefMut for LineBuf {
 
 	fn deref_mut (& mut self) -> & mut Line {
 		Line::new_mut (& mut self.cells)
+	}
+
+}
+
+impl From <Vec <Cell>> for LineBuf {
+
+	fn from (cells: Vec <Cell>) -> LineBuf {
+		LineBuf {
+			cells: cells,
+		}
 	}
 
 }
@@ -117,32 +138,36 @@ impl IntoDefault for LineBuf {
 
 impl <'a> IntoIterator for & 'a LineBuf {
 
-	type Item = & 'a Cell;
-	type IntoIter = slice::Iter <'a, Cell>;
+	type Item = Cell;
+	type IntoIter = iter::Cloned <slice::Iter <'a, Cell>>;
 
-	fn into_iter (self) -> slice::Iter <'a, Cell> {
-		self.cells.iter ()
+	fn into_iter (self) -> iter::Cloned <slice::Iter <'a, Cell>> {
+		self.cells.iter ().cloned ()
 	}
 
 }
 
-impl From <Vec <Cell>> for LineBuf {
+#[ cfg (test) ]
+mod tests {
 
-	fn from (cells: Vec <Cell>) -> LineBuf {
-		LineBuf {
-			cells: cells,
-		}
-	}
+	use super::*;
 
-}
+	#[ test ]
+	fn test_line_buf_debug () {
 
-impl fmt::Debug for LineBuf {
+		assert_eq! (
+			format! (
+				"{:?}",
+				LineBuf::from (vec! [
+					Cell::UNKNOWN,
+					Cell::EMPTY,
+					Cell::FILLED,
+					Cell::ERROR,
+				]),
+			),
+			"[- #!]",
+		);
 
-	fn fmt (
-		& self,
-		formatter: & mut fmt::Formatter <'_>,
-	) -> fmt::Result {
-		fmt::Debug::fmt (& self, formatter)
 	}
 
 }

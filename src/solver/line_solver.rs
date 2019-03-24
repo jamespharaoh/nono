@@ -4,14 +4,14 @@ use std::mem;
 use crate::*;
 
 pub fn solve_line <
-	MyIntoLine: IntoLine,
+	LineIter: IntoIterator <Item = Cell>,
 > (
-	into_line: MyIntoLine,
+	line_iter: LineIter,
 	clues_line: & CluesLine,
 ) -> Option <LineSolverIter> {
 
 	LineSolver::new (
-		into_line,
+		line_iter,
 		clues_line,
 	).ok ().map (LineSolver::into_iter)
 
@@ -30,15 +30,15 @@ pub struct LineSolver {
 impl LineSolver {
 
 	pub fn new <
-		ExistingLine: IntoLine,
+		LineIter: IntoIterator <Item = Cell>,
 	> (
-		existing_line: ExistingLine,
+		line_iter: LineIter,
 		clues_line: & CluesLine,
 	) -> Result <LineSolver, LineSolver> {
 
 		let line_solver: LineSolver = Default::default ();
 
-		line_solver.into_new (existing_line, clues_line)
+		line_solver.into_new (line_iter, clues_line)
 
 	}
 
@@ -58,14 +58,14 @@ impl LineSolver {
 	}
 
 	pub fn into_new <
-		MyIntoLine: IntoLine,
+		LineIter: IntoIterator <Item = Cell>,
 	> (
 		self,
-		into_line: MyIntoLine,
+		line_iter: LineIter,
 		clues_line: & CluesLine,
 	) -> Result <LineSolver, LineSolver> {
 
-		let line = self.line.into_copy_of (into_line);
+		let line = self.line.into_copy_of (line_iter);
 
 		let (clues_placer, sample_line) = {
 

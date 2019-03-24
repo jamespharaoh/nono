@@ -169,69 +169,6 @@ impl fmt::Debug for Line {
 
 }
 
-pub trait IntoLine {
-
-	type Iter: Iterator <Item = Cell>;
-
-	fn into (self) -> Self::Iter;
-
-}
-
-impl <
-	IntoCell: Into <Cell>,
-	Source: Iterator <Item = IntoCell> + Sized,
-> IntoLine for Source {
-
-	type Iter = IntoLineIter <IntoCell, Source>;
-
-	fn into (self) -> IntoLineIter <IntoCell, Source> {
-		IntoLineIter {
-			source: self.into_iter (),
-		}
-	}
-
-}
-
-impl <'a> IntoLine for & 'a Line {
-
-	type Iter = Cloned <slice::Iter <'a, Cell>>;
-
-	fn into (self) -> Cloned <slice::Iter <'a, Cell>> {
-		self.cells ().iter ().cloned ()
-	}
-
-}
-
-impl <'a> IntoLine for & 'a LineBuf {
-
-	type Iter = Cloned <slice::Iter <'a, Cell>>;
-
-	fn into (self) -> Cloned <slice::Iter <'a, Cell>> {
-		self.cells ().iter ().cloned ()
-	}
-
-}
-
-pub struct IntoLineIter <
-	IntoCell: Into <Cell>,
-	Source: Iterator <Item = IntoCell> + Sized,
-> {
-	source: Source,
-}
-
-impl <
-	IntoCell: Into <Cell>,
-	Source: Iterator <Item = IntoCell> + Sized,
-> Iterator for IntoLineIter <IntoCell, Source> {
-
-	type Item = Cell;
-
-	fn next (& mut self) -> Option <Cell> {
-		self.source.next ().map (Into::into)
-	}
-
-}
-
 #[ cfg (test) ]
 mod tests {
 
