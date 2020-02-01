@@ -1,31 +1,76 @@
 [package]
-name = "nono"
-version = "0.1.0"
-authors = ["James Pharaoh <james@pharaoh.uk>"]
-edition = "2018"
+
+	name = "nono"
+	version = "0.1.0"
+	authors = ["James Pharaoh <james@pharaoh.uk>"]
+	edition = "2018"
+
+[features]
+
+	default = []
+
+	gtk-example = [
+		"cairo-rs",
+		"gdk",
+		"gio",
+		"glib",
+		"gtk",
+	]
+
+	alloc-example = [
+		"stats_alloc",
+	]
 
 [lib]
-name = "nono"
 
-[[bin]]
-name = "nono-cli"
-path = "src/bin/cli.rs"
+	name = "nono"
 
-[[bin]]
-name = "nono-gtk"
-path = "src/bin/gtk.rs"
+[[example]]
 
-[[bin]]
-name = "nono-alloc"
-path = "src/bin/alloc.rs"
+	name = "nono-cli"
+	path = "examples/cli.rs"
 
-[dependencies]
-cairo-rs = "0.6"
-gdk = "0.10"
-gio = "0.6"
-glib = "0.7"
-gtk = "0.6"
-stats_alloc = "*"
+[[example]]
+
+	name = "nono-gtk"
+	path = "examples/gtk.rs"
+
+[[example]]
+
+	name = "nono-alloc"
+	path = "src/bin/alloc.rs"
+
+[dependencies.cairo-rs]
+
+	version = "0.6"
+	optional = true
+
+[dependencies.gdk]
+
+	version = "0.10"
+	optional = true
+
+[dependencies.gio]
+
+	version = "0.6"
+	optional = true
+
+[dependencies.glib]
+
+	version = "0.7"
+	optional = true
+
+[dependencies.gtk]
+
+	version = "0.6"
+	optional = true
+
+[dependencies.stats_alloc]
+
+	version = "*"
+	optional = true
 
 [profile.release]
-lto = true
+
+	lto = true
+
