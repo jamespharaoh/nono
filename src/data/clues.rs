@@ -54,7 +54,7 @@ impl Clues {
 		);
 
 		#[ derive (PartialEq) ]
-		enum Mode { None, Rows, Cols };
+		enum Mode { None, Rows, Cols }
 		let mut mode = Mode::None;
 
 		let mut rows: Vec <Vec <LineSize>> = Vec::new ();

@@ -3,7 +3,7 @@
 	name = "nono"
 	version = "0.1.0"
 	authors = ["James Pharaoh <james@pharaoh.uk>"]
-	edition = "2018"
+	edition = "2021"
 
 [features]
 
@@ -42,27 +42,27 @@
 
 [dependencies.cairo-rs]
 
-	version = "0.6"
+	version = "0.16"
 	optional = true
 
 [dependencies.gdk]
 
-	version = "0.10"
+	version = "0.16"
 	optional = true
 
 [dependencies.gio]
 
-	version = "0.6"
+	version = "0.16"
 	optional = true
 
 [dependencies.glib]
 
-	version = "0.7"
+	version = "0.16"
 	optional = true
 
 [dependencies.gtk]
 
-	version = "0.6"
+	version = "0.16"
 	optional = true
 
 [dependencies.stats_alloc]

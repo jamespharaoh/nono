@@ -7,12 +7,13 @@ use gtk;
 
 use gio::prelude::*;
 use gtk::prelude::*;
-use gtk::SettingsExt;
+use gtk::traits::SettingsExt;
 
 use std::cell::RefCell;
 use std::env;
 use std::io;
 use std::rc::Rc;
+use std::time::Duration;
 
 use nono::*;
 
@@ -27,31 +28,28 @@ fn main () {
 
 	// create gtk app
 
-	let application = gtk::Application::new (
-		"com.jamespharaoh.nono",
-		gio::ApplicationFlags::HANDLES_OPEN,
-	).expect ("Initialization failed...");
+	let application =
+		gtk::Application::new (
+			Some ("com.jamespharaoh.nono"),
+			gio::ApplicationFlags::HANDLES_OPEN);
 
 	application.connect_open (|app, files, hint| {
 		handle_open (app, files, hint);
 	});
 
-	application.run (
-		& env::args ().collect::<Vec <_>> (),
-	);
+	application.run_with_args (
+		& env::args ().collect::<Vec <_>> ());
 
 }
 
 fn handle_open (
 	application: & gtk::Application,
-	files: & [gio::File ],
+	files: & [gio::File],
 	_hint: & str,
 ) {
-
 	for file in files {
 		handle_open_one (application, file);
 	}
-
 }
 
 fn handle_open_one (
@@ -61,7 +59,8 @@ fn handle_open_one (
 
 	// load clues
 
-	let file_input_stream = file.read (gio::NONE_CANCELLABLE).unwrap ();
+	let file_input_stream =
+		file.read (gio::Cancellable::NONE).unwrap ();
 
 	let mut reader = InputStreamReader {
 		input_stream: file_input_stream.upcast (),
@@ -158,15 +157,16 @@ impl SolverWindow {
 
 		window.show_all ();
 
-		state.dimensions = Self::calculate_dimensions (
-			& state.solver.clues (),
-			& state.solver.grid (),
-		);
+		state.dimensions =
+			Self::calculate_dimensions (
+				& state.solver.clues (),
+				& state.solver.grid ());
 
 		let self_clone = self.clone ();
-		state.timeout_source = Some (
-			gtk::timeout_add (10, move || self_clone.tick ()),
-		);
+		state.timeout_source =
+			Some (glib::timeout_add_local (
+				Duration::from_millis (10),
+				move || self_clone.tick ()));
 
 		let self_clone = self.clone ();
 		window.connect_destroy (move |_window|
@@ -258,7 +258,7 @@ impl SolverWindow {
 
 	}
 
-	fn tick (& self) -> gtk::Continue {
+	fn tick (& self) -> Continue {
 
 		if self.solve_one_cell () {
 
@@ -267,7 +267,7 @@ impl SolverWindow {
 
 			window.queue_draw ();
 
-			gtk::Continue (true)
+			Continue (true)
 
 		} else {
 
@@ -275,7 +275,7 @@ impl SolverWindow {
 
 			state.timeout_source = None;
 
-			gtk::Continue (false)
+			Continue (false)
 
 		}
 
@@ -313,8 +313,8 @@ impl SolverWindow {
 		let content_height = state.dimensions.size.height;
 		let content_ratio = content_width / content_height;
 
-		let native_width = drawing_area.get_allocated_width () as f64;
-		let native_height = drawing_area.get_allocated_height () as f64;
+		let native_width = drawing_area.allocated_width () as f64;
+		let native_height = drawing_area.allocated_height () as f64;
 		let native_ratio = native_width / native_height;
 
 		let scale = if native_ratio > content_ratio {
@@ -355,8 +355,8 @@ impl SolverWindow {
 			state.dimensions.row_clues.top,
 		);
 
-		let gtk_settings = gtk::Settings::get_default ().unwrap ();
-		let gtk_font_name = gtk_settings.get_property_gtk_font_name ().unwrap ();
+		let gtk_settings = gtk::Settings::default ().unwrap ();
+		let gtk_font_name = gtk_settings.gtk_font_name ().unwrap ();
 
 		let font_name = & gtk_font_name [
 			0 .. gtk_font_name.chars ().rev ()
@@ -378,7 +378,7 @@ impl SolverWindow {
 			for (clue_index, clue) in row_clues.iter ().rev ().enumerate () {
 
 				let text = format! ("{}", clue);
-				let text_extents = context.text_extents (& text);
+				let text_extents = context.text_extents (& text).unwrap ();
 
 				let clue_position = Position {
 					horizontal: - CELL_SIZE * clue_index as f64,
@@ -401,8 +401,8 @@ impl SolverWindow {
 				);
 
 				context.rel_move_to (
-					- (CELL_SIZE + text_extents.x_advance) / 2.0,
-					(CELL_SIZE + text_extents.height) / 2.0,
+					- (CELL_SIZE + text_extents.x_advance ()) / 2.0,
+					(CELL_SIZE + text_extents.height ()) / 2.0,
 				);
 
 				context.set_source (& palette.clue_text);
@@ -431,8 +431,8 @@ impl SolverWindow {
 			state.dimensions.col_clues.bottom,
 		);
 
-		let gtk_settings = gtk::Settings::get_default ().unwrap ();
-		let gtk_font_name = gtk_settings.get_property_gtk_font_name ().unwrap ();
+		let gtk_settings = gtk::Settings::default ().unwrap ();
+		let gtk_font_name = gtk_settings.gtk_font_name ().unwrap ();
 
 		let font_name = & gtk_font_name [
 			0 .. gtk_font_name.chars ().rev ()
@@ -454,7 +454,7 @@ impl SolverWindow {
 			for (clue_index, clue) in col_clues.iter ().rev ().enumerate () {
 
 				let text = format! ("{}", clue);
-				let text_extents = context.text_extents (& text);
+				let text_extents = context.text_extents (& text).unwrap ();
 
 				let clue_position = Position {
 					horizontal: CELL_SIZE * col_index as f64,
@@ -477,8 +477,8 @@ impl SolverWindow {
 				);
 
 				context.rel_move_to (
-					(CELL_SIZE - text_extents.x_advance) / 2.0,
-					- (CELL_SIZE - text_extents.height) / 2.0,
+					(CELL_SIZE - text_extents.x_advance ()) / 2.0,
+					- (CELL_SIZE - text_extents.height ()) / 2.0,
 				);
 
 				context.set_source (& palette.clue_text);
@@ -589,7 +589,7 @@ impl SolverWindow {
 		let mut state = self.state.borrow_mut ();
 
 		if let Some (timeout_source) = state.timeout_source.take () {
-			glib::source::source_remove (timeout_source);
+			timeout_source.remove ();
 		}
 
 	}
@@ -676,15 +676,14 @@ impl io::Read for InputStreamReader {
 		buffer: & mut [u8],
 	) -> Result <usize, io::Error> {
 
-		let bytes = self.input_stream.read_bytes (
-			buffer.len (),
-			gio::NONE_CANCELLABLE,
-		).map_err (|gio_err|
-			io::Error::new (
-				io::ErrorKind::Other,
-				gio_err,
-			)
-		) ?;
+		let bytes =
+			self.input_stream.read_bytes (
+					buffer.len (),
+					gio::Cancellable::NONE)
+				.map_err (|gio_err|
+					io::Error::new (
+						io::ErrorKind::Other,
+						gio_err)) ?;
 
 		buffer [0 .. bytes.len ()].copy_from_slice (& bytes);
 
@@ -695,14 +694,14 @@ impl io::Read for InputStreamReader {
 }
 
 struct Palette {
-	background: cairo::Pattern,
-	lines: cairo::Pattern,
-	clue_text: cairo::Pattern,
-	clue_box: cairo::Pattern,
-	unknown: cairo::Pattern,
-	filled: cairo::Pattern,
-	empty: cairo::Pattern,
-	error: cairo::Pattern,
+	background: cairo::SolidPattern,
+	lines: cairo::SolidPattern,
+	clue_text: cairo::SolidPattern,
+	clue_box: cairo::SolidPattern,
+	unknown: cairo::SolidPattern,
+	filled: cairo::SolidPattern,
+	empty: cairo::SolidPattern,
+	error: cairo::SolidPattern,
 }
 
 impl Palette {
@@ -722,12 +721,8 @@ impl Palette {
 
 	}
 
-	fn from_rgb (red: f64, green: f64, blue: f64) -> cairo::Pattern {
-
-		cairo::Pattern::SolidPattern (
-			cairo::SolidPattern::from_rgb (red, green, blue),
-		)
-
+	fn from_rgb (red: f64, green: f64, blue: f64) -> cairo::SolidPattern {
+		cairo::SolidPattern::from_rgb (red, green, blue)
 	}
 
 }
